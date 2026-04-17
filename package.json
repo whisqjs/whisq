@@ -10,9 +10,11 @@
     "clean": "turbo run clean",
     "lint": "turbo run lint",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
+    "check:versions": "node scripts/check-versions.mjs",
+    "sync:template-versions": "node scripts/sync-template-versions.mjs",
     "changeset": "changeset",
-    "version": "changeset version",
-    "release": "pnpm build && pnpm test && changeset publish"
+    "version": "changeset version && node scripts/sync-template-versions.mjs",
+    "release": "pnpm build && pnpm test && pnpm check:versions && changeset publish"
   },
   "devDependencies": {
     "@changesets/changelog-github": "^0.6.0",
