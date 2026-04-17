@@ -1,0 +1,40 @@
+{
+  "name": "create-whisq",
+  "version": "0.1.0-alpha.3",
+  "description": "Scaffold a new Whisq project",
+  "type": "module",
+  "bin": {
+    "create-whisq": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc && node -e \"const fs=require('fs');const path=require('path');function cp(s,d){fs.mkdirSync(d,{recursive:true});for(const e of fs.readdirSync(s,{withFileTypes:true})){const sp=path.join(s,e.name),dp=path.join(d,e.name);e.isDirectory()?cp(sp,dp):fs.copyFileSync(sp,dp)}}cp('src/templates','dist/templates')\"",
+    "dev": "tsc --watch",
+    "test": "vitest run --passWithNoTests",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "pnpm build"
+  },
+  "keywords": [
+    "whisq",
+    "create",
+    "scaffold",
+    "cli"
+  ],
+  "author": "Markot s. r. o.",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/whisqjs/whisq.git",
+    "directory": "packages/create-whisq"
+  },
+  "homepage": "https://whisq.dev",
+  "sideEffects": false
+}

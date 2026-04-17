@@ -1,0 +1,39 @@
+# dependencies
+node_modules/
+
+# build
+dist/
+*.tsbuildinfo
+.turbo/
+.astro/
+
+# env files
+.env
+.env.*
+
+# ide
+.idea/
+.run
+.vscode
+
+# os
+.DS_Store
+Thumbs.db
+
+# temp / dev artifacts
+.tmp/
+/logs/
+.playwright-mcp/
+*.b64
+
+# ai tooling
+.claude/
+.cursorrules
+CLAUDE.md
+
+# internal drafts
+draft/
+examples/
+
+# website (moved to whisqjs/whisq.dev)
+website/

@@ -1,0 +1,63 @@
+{
+  "name": "@whisq/core",
+  "version": "0.1.0-alpha.1",
+  "description": "The AI-native JavaScript framework that senses what you mean — reactive signals, templates, and components",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest run --passWithNoTests",
+    "size": "size-limit",
+    "bench": "tsx bench/signal-throughput.ts",
+    "bench:shake": "tsx bench/tree-shake.ts",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "pnpm build"
+  },
+  "keywords": [
+    "framework",
+    "reactive",
+    "signals",
+    "ai",
+    "ai-native",
+    "template-literals",
+    "lightweight",
+    "zero-build",
+    "whisq"
+  ],
+  "author": "Markot s. r. o.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/whisqjs/whisq.git",
+    "directory": "packages/core"
+  },
+  "homepage": "https://whisq.dev",
+  "sideEffects": false,
+  "size-limit": [
+    {
+      "path": "dist/index.js",
+      "limit": "5 KB",
+      "gzip": true
+    }
+  ],
+  "devDependencies": {
+    "@size-limit/preset-small-lib": "^11.0.0",
+    "jsdom": "^29.0.2",
+    "size-limit": "^11.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  }
+}

@@ -1,0 +1,49 @@
+{
+  "name": "@whisq/devtools",
+  "version": "0.1.0-alpha.1",
+  "description": "DevTools runtime hook for Whisq — signal inspection, component tree, effect tracking",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest run --passWithNoTests",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "pnpm build"
+  },
+  "keywords": [
+    "whisq",
+    "devtools",
+    "debugging",
+    "signals"
+  ],
+  "author": "Markot s. r. o.",
+  "license": "MIT",
+  "dependencies": {
+    "@whisq/core": "workspace:*"
+  },
+  "devDependencies": {
+    "jsdom": "^29.0.2",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/whisqjs/whisq.git",
+    "directory": "packages/devtools"
+  },
+  "homepage": "https://whisq.dev",
+  "sideEffects": false
+}

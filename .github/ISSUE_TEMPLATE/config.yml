@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Documentation
+    url: https://whisq.dev
+    about: Check the docs — your question might already be answered.
+  - name: Playground
+    url: https://whisq.dev/playground
+    about: Try Whisq in the browser before reporting issues.

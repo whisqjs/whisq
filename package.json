@@ -1,0 +1,30 @@
+{
+  "name": "whisq",
+  "version": "0.0.1-alpha.0",
+  "private": true,
+  "description": "Whisq — the AI-native JavaScript framework that senses what you mean",
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "test": "turbo run test",
+    "clean": "turbo run clean",
+    "lint": "turbo run lint",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
+    "changeset": "changeset",
+    "version": "changeset version",
+    "release": "pnpm build && pnpm test && changeset publish"
+  },
+  "devDependencies": {
+    "@changesets/changelog-github": "^0.6.0",
+    "@changesets/cli": "^2.30.0",
+    "esbuild": "^0.28.0",
+    "prettier": "^3.4.0",
+    "turbo": "^2.3.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  },
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=20"
+  }
+}

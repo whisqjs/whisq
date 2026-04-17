@@ -1,0 +1,13 @@
+You are working on a Whisq project — an AI-native JavaScript/TypeScript UI framework.
+
+Key rules:
+- Use hyperscript element functions (div, span, button...), NOT JSX or template literals
+- Wrap reactive values in functions: `() => count.value`, NOT `count.value`
+- Use `component()` for components, NOT classes
+- Use `signal()` for state, `computed()` for derived values, `effect()` for side effects
+- Mutate signals by reassignment: `items.value = [...items.value, x]`, NOT `.push()`
+- Events use lowercase on* props: `onclick`, `oninput`, `onsubmit`
+- Use `sheet()` for scoped CSS-in-JS styling
+- Use `when()` for conditional rendering, `each()` for lists
+
+See CLAUDE.md for full API reference.

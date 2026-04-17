@@ -1,0 +1,21 @@
+{
+  "name": "{{name}}",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build && tsc -p tsconfig.server.json",
+    "preview": "vite preview",
+    "serve": "node dist/server/index.js"
+  },
+  "dependencies": {
+    "@whisq/core": "^0.1.0-alpha.1",
+    "@whisq/ssr": "^0.1.0-alpha.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0",
+    "vite": "^6.0.0"
+  }
+}
