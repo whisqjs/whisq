@@ -108,7 +108,12 @@ Whisq is designed for AI-assisted development:
 
 ## Documentation
 
-Full documentation at [whisq.dev](https://whisq.dev) (coming soon).
+- [Getting Started](https://whisq.dev/getting-started/introduction/) — installation, quick start, first component
+- [Core Concepts](https://whisq.dev/core-concepts/signals/) — signals, elements, components, styling
+- [API Reference](https://whisq.dev/api/signal/) — complete API docs
+- [Guides](https://whisq.dev/guides/routing/) — routing, SSR, forms, testing, data fetching
+- [Examples](https://whisq.dev/examples/counter/) — counter, todo, dashboard, forms
+- [Playground](https://whisq.dev/playground/) — try Whisq in the browser
 
 ## Contributing
 
