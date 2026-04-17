@@ -51,3 +51,10 @@ updates:
     commit-message:
       prefix: chore
       include: scope
+    ignore:
+      # pnpm/action-setup@v6 installs a newer pnpm whose lockfile parser
+      # rejects lockfiles written by pnpm@9.x (ERR_PNPM_BROKEN_LOCKFILE).
+      # Revisit after we regenerate the lockfile on pnpm@10 or @11.
+      - dependency-name: "pnpm/action-setup"
+        update-types:
+          - version-update:semver-major
