@@ -1,0 +1,60 @@
+# Dependabot configuration — https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+# All update PRs target `develop` (the integration branch). Release PRs from
+# develop to main are handled manually.
+
+version: 2
+updates:
+  # npm / pnpm workspace root
+  - package-ecosystem: npm
+    directory: "/"
+    target-branch: develop
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Bratislava
+    open-pull-requests-limit: 10
+    labels:
+      - dependencies
+    commit-message:
+      prefix: chore
+      include: scope
+    groups:
+      dev-dependencies:
+        dependency-type: development
+        update-types:
+          - minor
+          - patch
+      prod-patch:
+        dependency-type: production
+        update-types:
+          - patch
+    ignore:
+      # Don't churn on major bumps — open those manually with a migration plan.
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major
+
+  # GitHub Actions workflow pins
+  - package-ecosystem: github-actions
+    directory: "/"
+    target-branch: develop
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Bratislava
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - ci
+    commit-message:
+      prefix: chore
+      include: scope
+    ignore:
+      # pnpm/action-setup@v6 installs a newer pnpm whose lockfile parser
+      # rejects lockfiles written by pnpm@9.x (ERR_PNPM_BROKEN_LOCKFILE).
+      # Revisit after we regenerate the lockfile on pnpm@10 or @11.
+      - dependency-name: "pnpm/action-setup"
+        update-types:
+          - version-update:semver-major

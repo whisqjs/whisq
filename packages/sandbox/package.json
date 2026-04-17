@@ -1,6 +1,6 @@
 {
   "name": "@whisq/sandbox",
-  "version": "0.1.0-alpha.1",
+  "version": "0.1.0-alpha.4",
   "description": "Sandboxed code execution for Whisq — isolated environment with configurable limits",
   "type": "module",
   "main": "./dist/index.js",
@@ -32,9 +32,9 @@
   "author": "Markot s. r. o.",
   "license": "MIT",
   "devDependencies": {
-    "@types/node": "^22.0.0",
-    "typescript": "^5.7.0",
-    "vitest": "^3.0.0"
+    "@types/node": "^22.19.17",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
   },
   "repository": {
     "type": "git",
