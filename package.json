@@ -26,5 +26,10 @@
   "packageManager": "pnpm@9.15.0",
   "engines": {
     "node": ">=20"
+  },
+  "pnpm": {
+    "overrides": {
+      "hono@<4.12.14": ">=4.12.14"
+    }
   }
 }
