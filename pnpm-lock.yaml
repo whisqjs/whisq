@@ -36,31 +36,31 @@ importers:
   packages/core:
     devDependencies:
       '@size-limit/preset-small-lib':
-        specifier: ^11.0.0
+        specifier: ^11.2.0
         version: 11.2.0(size-limit@11.2.0)
       jsdom:
         specifier: ^29.0.2
         version: 29.0.2
       size-limit:
-        specifier: ^11.0.0
+        specifier: ^11.2.0
         version: 11.2.0
       typescript:
-        specifier: ^5.7.0
+        specifier: ^5.9.3
         version: 5.9.3
       vitest:
-        specifier: ^3.0.0
+        specifier: ^3.2.4
         version: 3.2.4(@types/debug@4.1.13)(@types/node@24.12.2)(jiti@2.6.1)(jsdom@29.0.2)(lightningcss@1.32.0)(yaml@2.8.3)
 
   packages/create-whisq:
     devDependencies:
       '@types/node':
-        specifier: ^22.0.0
+        specifier: ^22.19.17
         version: 22.19.17
       typescript:
-        specifier: ^5.7.0
+        specifier: ^5.9.3
         version: 5.9.3
       vitest:
-        specifier: ^3.0.0
+        specifier: ^3.2.4
         version: 3.2.4(@types/debug@4.1.13)(@types/node@22.19.17)(jiti@2.6.1)(jsdom@29.0.2)(lightningcss@1.32.0)(yaml@2.8.3)
 
   packages/devtools:
@@ -73,29 +73,29 @@ importers:
         specifier: ^29.0.2
         version: 29.0.2
       typescript:
-        specifier: ^5.7.0
+        specifier: ^5.9.3
         version: 5.9.3
       vitest:
-        specifier: ^3.0.0
+        specifier: ^3.2.4
         version: 3.2.4(@types/debug@4.1.13)(@types/node@24.12.2)(jiti@2.6.1)(jsdom@29.0.2)(lightningcss@1.32.0)(yaml@2.8.3)
 
   packages/mcp-server:
     dependencies:
       '@modelcontextprotocol/sdk':
-        specifier: ^1.11.0
+        specifier: ^1.29.0
         version: 1.29.0(zod@3.25.76)
       zod:
-        specifier: ^3.23.0
+        specifier: ^3.25.76
         version: 3.25.76
     devDependencies:
       '@types/node':
-        specifier: ^22.0.0
+        specifier: ^22.19.17
         version: 22.19.17
       typescript:
-        specifier: ^5.7.0
+        specifier: ^5.9.3
         version: 5.9.3
       vitest:
-        specifier: ^3.0.0
+        specifier: ^3.2.4
         version: 3.2.4(@types/debug@4.1.13)(@types/node@22.19.17)(jiti@2.6.1)(jsdom@29.0.2)(lightningcss@1.32.0)(yaml@2.8.3)
 
   packages/router:
@@ -105,31 +105,31 @@ importers:
         version: link:../core
     devDependencies:
       '@size-limit/preset-small-lib':
-        specifier: ^11.0.0
+        specifier: ^11.2.0
         version: 11.2.0(size-limit@11.2.0)
       jsdom:
         specifier: ^29.0.2
         version: 29.0.2
       size-limit:
-        specifier: ^11.0.0
+        specifier: ^11.2.0
         version: 11.2.0
       typescript:
-        specifier: ^5.7.0
+        specifier: ^5.9.3
         version: 5.9.3
       vitest:
-        specifier: ^3.0.0
+        specifier: ^3.2.4
         version: 3.2.4(@types/debug@4.1.13)(@types/node@24.12.2)(jiti@2.6.1)(jsdom@29.0.2)(lightningcss@1.32.0)(yaml@2.8.3)
 
   packages/sandbox:
     devDependencies:
       '@types/node':
-        specifier: ^22.0.0
+        specifier: ^22.19.17
         version: 22.19.17
       typescript:
-        specifier: ^5.7.0
+        specifier: ^5.9.3
         version: 5.9.3
       vitest:
-        specifier: ^3.0.0
+        specifier: ^3.2.4
         version: 3.2.4(@types/debug@4.1.13)(@types/node@22.19.17)(jiti@2.6.1)(jsdom@29.0.2)(lightningcss@1.32.0)(yaml@2.8.3)
 
   packages/ssr:
@@ -164,10 +164,10 @@ importers:
         specifier: ^29.0.2
         version: 29.0.2
       typescript:
-        specifier: ^5.7.0
+        specifier: ^5.9.3
         version: 5.9.3
       vitest:
-        specifier: ^3.0.0
+        specifier: ^3.2.4
         version: 3.2.4(@types/debug@4.1.13)(@types/node@24.12.2)(jiti@2.6.1)(jsdom@29.0.2)(lightningcss@1.32.0)(yaml@2.8.3)
 
   packages/vite-plugin:
