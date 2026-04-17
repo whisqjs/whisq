@@ -53,9 +53,20 @@ jobs:
       - name: Check bundle size
         run: cd packages/core && pnpm size
 
-      - name: Publish to npm
+      # Publish is split so a failure on the unscoped `create-whisq` package
+      # (which has its own token permissions on npm) does not block the
+      # @whisq/* scope. The whisq scope must stay internally consistent;
+      # create-whisq can lag until its token is wired up.
+      - name: Publish @whisq/* to npm
         if: inputs.dry_run != 'true' && startsWith(github.ref, 'refs/tags/v')
-        run: pnpm -r publish --access public --no-git-checks --provenance
+        run: pnpm --filter "@whisq/*" publish --access public --no-git-checks --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish create-whisq to npm
+        if: inputs.dry_run != 'true' && startsWith(github.ref, 'refs/tags/v')
+        continue-on-error: true
+        run: pnpm --filter create-whisq publish --access public --no-git-checks --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
