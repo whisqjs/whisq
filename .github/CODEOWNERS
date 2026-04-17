@@ -1,0 +1,31 @@
+# CODEOWNERS — https://docs.github.com/articles/about-code-owners
+# Each line maps a path pattern to one or more owners. Last matching line wins.
+# Owners are auto-requested for review on PRs that touch matching paths.
+
+# Default: everything needs mkotulac-markot review
+*                                   @mkotulac-markot
+
+# Workflows, Dependabot, and repo config
+/.github/                           @mkotulac-markot
+
+# Release tooling
+/.changeset/                        @mkotulac-markot
+/package.json                       @mkotulac-markot
+/pnpm-lock.yaml                     @mkotulac-markot
+/turbo.json                         @mkotulac-markot
+
+# Packages
+/packages/core/                     @mkotulac-markot
+/packages/router/                   @mkotulac-markot
+/packages/ssr/                      @mkotulac-markot
+/packages/vite-plugin/              @mkotulac-markot
+/packages/testing/                  @mkotulac-markot
+/packages/devtools/                 @mkotulac-markot
+/packages/sandbox/                  @mkotulac-markot
+/packages/mcp-server/               @mkotulac-markot
+/packages/create-whisq/             @mkotulac-markot
+
+# Docs & brand
+/docs/                              @mkotulac-markot
+/README.md                          @mkotulac-markot
+/CLAUDE.md                          @mkotulac-markot
