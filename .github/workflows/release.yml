@@ -38,6 +38,9 @@ jobs:
       - name: Lint
         run: pnpm format --check
 
+      - name: Version consistency
+        run: node scripts/check-versions.mjs
+
       - name: Typecheck
         run: pnpm build && pnpm -r exec tsc --noEmit
 
