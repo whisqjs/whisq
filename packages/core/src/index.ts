@@ -93,6 +93,10 @@ export {
 } from "./component.js";
 export type { ComponentDef, Resource, InjectionKey } from "./component.js";
 
+// Refs
+export { ref } from "./ref.js";
+export type { Ref } from "./ref.js";
+
 // Styling
 export { sheet, styles, cx, rcx, theme } from "./styling.js";
 

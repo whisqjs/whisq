@@ -11,19 +11,11 @@
 // AI generates this correctly because it's just function calls.
 // ============================================================================
 
-import {
-  effect,
-  isSignal,
-  setEffectErrorHandler,
-  type Signal,
-} from "./reactive.js";
+import { effect, isSignal, setEffectErrorHandler } from "./reactive.js";
 import { reconcileKeyed, type KeyedEntry } from "./reconcile.js";
+import type { Ref } from "./ref.js";
 
 // ── Types ───────────────────────────────────────────────────────────────────
-
-type Ref<T extends HTMLElement = HTMLElement> =
-  | Signal<T | null>
-  | ((el: T | null) => void);
 
 type Child =
   | string
