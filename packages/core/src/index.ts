@@ -95,3 +95,13 @@ export type { ComponentDef, Resource, InjectionKey } from "./component.js";
 
 // Styling
 export { sheet, styles, cx, rcx, theme } from "./styling.js";
+
+// Forms
+export { bind } from "./bind.js";
+export type {
+  TextBind,
+  NumberBind,
+  CheckboxBind,
+  RadioBind,
+  BindOptions,
+} from "./bind.js";
