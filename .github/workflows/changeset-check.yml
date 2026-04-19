@@ -1,0 +1,39 @@
+name: Changeset check
+
+# Guards against PRs that change shipped code but forget to include a
+# changeset. Add the `skip-changeset` label to bypass (for docs, repo
+# tooling, or any change that doesn't affect a published package).
+
+on:
+  pull_request:
+    branches: [develop]
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  check:
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'skip-changeset') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Require a changeset file to be added in this PR
+        run: |
+          git fetch --no-tags --depth=1 origin "$BASE_REF"
+          added=$(git diff --name-only --diff-filter=A "origin/$BASE_REF"...HEAD -- '.changeset/*.md' | grep -v README.md || true)
+          if [ -z "$added" ]; then
+            echo "::error::This PR has no new changeset."
+            echo "Run 'pnpm changeset' locally, commit the generated .changeset/*.md file, and push."
+            echo "If this PR genuinely doesn't need a changeset (docs-only, repo tooling, dep bumps without API surface),"
+            echo "add the 'skip-changeset' label to the PR and this check will pass."
+            exit 1
+          fi
+          echo "Changeset present:"
+          echo "$added"
+        env:
+          BASE_REF: ${{ github.base_ref }}
