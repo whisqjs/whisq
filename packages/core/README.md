@@ -27,6 +27,32 @@ mount(App, document.getElementById("app"));
 
 Full documentation at [whisq.dev](https://whisq.dev).
 
+## Public API manifest
+
+Every published release ships a machine-readable list of exports at
+`dist/public-api.json` inside the npm package. It's the source of truth
+for "what `@whisq/core` exposes at this version" and is used by the
+docs site to guard against silent drift in the AI reference card.
+
+Shape:
+
+```json
+{
+  "version": "0.1.0-alpha.4",
+  "exports": ["Signal", "bind", "component", "mount", "..."]
+}
+```
+
+Fetch it via any CDN that mirrors npm:
+
+```
+https://unpkg.com/@whisq/core@<version>/dist/public-api.json
+https://cdn.jsdelivr.net/npm/@whisq/core@<version>/dist/public-api.json
+```
+
+Regenerated on every build by `scripts/generate-public-api.mjs` reading
+`src/index.ts`.
+
 ## License
 
 MIT
