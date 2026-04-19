@@ -91,7 +91,13 @@ export {
   inject,
   useHead,
 } from "./component.js";
-export type { ComponentDef, Resource, InjectionKey } from "./component.js";
+export type {
+  ComponentDef,
+  Resource,
+  ResourceOptions,
+  ResourceSourceOptions,
+  InjectionKey,
+} from "./component.js";
 
 // Refs
 export { ref } from "./ref.js";
