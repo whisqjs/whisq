@@ -490,6 +490,46 @@ export function when(
   return () => (condition() ? then() : otherwise ? otherwise() : null);
 }
 
+// ── match() — Multi-branch conditional rendering ───────────────────────────
+
+type MatchRender = () => WhisqNode | string | null;
+type MatchBranch = readonly [() => boolean, MatchRender];
+
+/**
+ * Multi-branch conditional renderer. Evaluates branches in order and renders
+ * the first whose predicate returns truthy. An optional trailing fallback
+ * (a bare render function, not wrapped in a tuple) renders when no branch
+ * matches. Re-evaluates reactively like other children.
+ *
+ * ```ts
+ * div(
+ *   match(
+ *     [() => users.loading(),    () => p("Loading...")],
+ *     [() => !!users.error(),    () => p({ class: "error" }, users.error()!.message)],
+ *     [() => !!users.data(),     () => List({ items: users.data()! })],
+ *     () => p("No data yet."), // fallback
+ *   ),
+ * )
+ * ```
+ *
+ * First-true-wins: if two predicates are true, only the earlier branch renders.
+ */
+export function match(...branches: MatchBranch[]): () => Child;
+export function match(...args: [...MatchBranch[], MatchRender]): () => Child;
+export function match(...args: Array<MatchBranch | MatchRender>): () => Child {
+  const last = args[args.length - 1];
+  const hasFallback = typeof last === "function";
+  const fallback = hasFallback ? (last as MatchRender) : undefined;
+  const branches = (hasFallback ? args.slice(0, -1) : args) as MatchBranch[];
+
+  return () => {
+    for (const [predicate, render] of branches) {
+      if (predicate()) return render();
+    }
+    return fallback ? fallback() : null;
+  };
+}
+
 // ── each() — List rendering ────────────────────────────────────────────────
 
 /**

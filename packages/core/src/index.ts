@@ -20,6 +20,7 @@ export {
   h,
   raw,
   when,
+  match,
   each,
   errorBoundary,
   portal,
