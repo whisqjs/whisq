@@ -82,11 +82,15 @@ If your PR genuinely doesn't need a version bump (docs-only, repo tooling, inter
 
 ### How the release actually cuts
 
-1. Merging a PR with changesets into `develop` triggers the Release workflow.
-2. The workflow accumulates pending changesets and opens (or updates) a PR titled **"chore: release packages"**. This PR shows the version bumps and CHANGELOG entries that would ship.
-3. When you merge that release PR, the workflow runs again and this time publishes to npm + creates git tags + opens a GitHub Release.
+The branch flow is strict: `feature → develop → release/v<version> → main → back-merge → develop`. No package.json editing by hand; two workflows do all the mechanical work.
 
-Nothing is done by hand — no `pnpm version` / `pnpm release` locally, no manual tag pushes. If something goes wrong, `workflow_dispatch` on the Release workflow is the manual escape hatch.
+1. Your PR merges to `develop` with its changeset attached.
+2. When enough changesets have accumulated, a maintainer opens **Actions → Release — prepare → Run workflow**. That creates a `release/v<version>` branch, bumps every `package.json`, writes CHANGELOGs, and opens a PR to `main`.
+3. A maintainer reviews the release PR and squash-merges it into `main`.
+4. The merge triggers **`release.yml`**, which publishes all bumped packages to npm with provenance, creates per-package git tags and GitHub Releases, and opens a back-merge PR.
+5. A maintainer squash-merges the back-merge PR into `develop`.
+
+Full details in [`docs/RELEASING.md`](./docs/RELEASING.md).
 
 ## License
 
