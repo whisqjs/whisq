@@ -14,6 +14,10 @@
 export { signal, computed, effect, batch } from "./reactive.js";
 export type { Signal, ReadonlySignal } from "./reactive.js";
 
+// Reactive collections (signalMap, signalSet) live in a sub-path import
+// to keep the top-level bundle under 5 KB:
+//   import { signalMap, signalSet } from "@whisq/core/collections";
+
 // Element functions (primary API)
 export {
   // Core
