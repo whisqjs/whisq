@@ -9,10 +9,6 @@ on:
         description: Tag
         required: true
         default: test-dispatch
-      body:
-        description: Body
-        required: false
-        default: ""
 
 permissions:
   contents: read
@@ -30,37 +26,7 @@ jobs:
           owner: whisqjs
           repositories: whisq.dev
 
-      - name: Build payload
-        id: payload
+      - name: Echo
+        run: echo "got a token of length=${#TOKEN}"
         env:
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
-          RELEASE_NAME: ${{ github.event.release.name }}
-          RELEASE_BODY: ${{ github.event.release.body }}
-          RELEASE_URL: ${{ github.event.release.html_url }}
-          INPUT_TAG: ${{ inputs.tag }}
-          INPUT_BODY: ${{ inputs.body }}
-        run: |
-          set -euo pipefail
-          TAG="${RELEASE_TAG:-$INPUT_TAG}"
-          NAME="${RELEASE_NAME:-}"
-          BODY="${RELEASE_BODY:-${INPUT_BODY:-}}"
-          URL="${RELEASE_URL:-}"
-          PAYLOAD=$(jq -nc \
-            --arg tag "$TAG" \
-            --arg name "$NAME" \
-            --arg body "$BODY" \
-            --arg html_url "$URL" \
-            '{tag: $tag, name: $name, body: $body, html_url: $html_url}')
-          {
-            echo "payload<<EOF"
-            echo "$PAYLOAD"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
-
-      - name: Send repository_dispatch
-        uses: peter-evans/repository-dispatch@v3
-        with:
-          token: ${{ steps.app-token.outputs.token }}
-          repository: whisqjs/whisq.dev
-          event-type: framework-release
-          client-payload: ${{ steps.payload.outputs.payload }}
+          TOKEN: ${{ steps.app-token.outputs.token }}
