@@ -1,6 +1,6 @@
 {
   "name": "@whisq/vite-plugin",
-  "version": "0.1.0-alpha.4",
+  "version": "0.1.0-alpha.5",
   "description": "Vite plugin for Whisq — file-based routing, HMR, and optimized builds",
   "type": "module",
   "main": "./dist/index.js",
