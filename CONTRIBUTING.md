@@ -64,6 +64,30 @@ pnpm test
 WHISQ-<issue#>: <short description>
 ```
 
+## Changesets & Releases
+
+Whisq uses [Changesets](https://github.com/changesets/changesets) to automate versioning and publishing. **Every PR that changes shipped code must include a changeset.**
+
+### Adding a changeset to your PR
+
+From the repo root:
+
+```bash
+pnpm changeset
+```
+
+The CLI asks which packages changed and whether each change is a `patch`, `minor`, or `major` (we're currently in `alpha` pre-mode, so all bumps are prerelease bumps of `0.1.0-alpha.N`). It writes a small Markdown file in `.changeset/` — commit it alongside your code.
+
+If your PR genuinely doesn't need a version bump (docs-only, repo tooling, internal dependency tweaks with no API impact), add the `skip-changeset` label to the PR and the check will pass.
+
+### How the release actually cuts
+
+1. Merging a PR with changesets into `develop` triggers the Release workflow.
+2. The workflow accumulates pending changesets and opens (or updates) a PR titled **"chore: release packages"**. This PR shows the version bumps and CHANGELOG entries that would ship.
+3. When you merge that release PR, the workflow runs again and this time publishes to npm + creates git tags + opens a GitHub Release.
+
+Nothing is done by hand — no `pnpm version` / `pnpm release` locally, no manual tag pushes. If something goes wrong, `workflow_dispatch` on the Release workflow is the manual escape hatch.
+
 ## License
 
 By contributing, you agree that your contributions will be licensed under the [MIT License](LICENSE).

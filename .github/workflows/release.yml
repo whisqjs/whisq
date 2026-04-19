@@ -1,24 +1,44 @@
 name: Release
 
-# Triggered by pushing a version tag (v0.1.0-alpha.0, v1.0.0, etc.)
-# or manually via workflow_dispatch.
+# Full release automation via Changesets.
+#
+# How it works:
+#
+# 1. Every PR to develop should include a changeset (a markdown file in
+#    `.changeset/`). PRs without one are blocked by the changeset-check job
+#    unless they carry the `skip-changeset` label (docs, repo tooling, etc.).
+#
+# 2. On push to develop, this workflow runs changesets/action. If there are
+#    pending changeset files, it opens (or updates) a PR titled
+#    "chore: release packages" that applies all pending changesets — bumping
+#    versions, updating CHANGELOGs, and removing the consumed changeset files.
+#
+# 3. Merging that release PR triggers this workflow again. This time there are
+#    no pending changesets, so the action runs `pnpm release` which publishes
+#    to npm and creates git tags for the newly-published versions.
+#
+# 4. A follow-up step turns the top-level tag (v<core-version>) into a
+#    GitHub Release with auto-generated notes.
+#
+# Manual override: `workflow_dispatch` lets you force a run, e.g. to recover
+# from a failed publish or publish a hotfix outside the normal flow.
 
 on:
   push:
-    tags: ["v*"]
+    branches: [develop]
   workflow_dispatch:
-    inputs:
-      dry_run:
-        description: "Dry run (skip publish)"
-        required: false
-        default: "false"
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 permissions:
   contents: write
+  pull-requests: write
   id-token: write
 
 jobs:
-  build-and-publish:
+  release:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -35,54 +55,62 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - name: Lint
-        run: pnpm format --check
-
-      - name: Version consistency
-        run: node scripts/check-versions.mjs
-
-      - name: Typecheck
-        run: pnpm build && pnpm -r exec tsc --noEmit
+      # Safety-net quality gates — the same gates run on every PR, but we
+      # re-run them here so a broken main-branch state can never reach npm.
+      - name: Build
+        run: pnpm build
 
       - name: Test
         run: pnpm test
 
-      - name: Build
-        run: pnpm build
+      - name: Version consistency
+        run: node scripts/check-versions.mjs
 
       - name: Check bundle size
         run: cd packages/core && pnpm size
 
-      # Publish is split so a failure on the unscoped `create-whisq` package
-      # (which has its own token permissions on npm) does not block the
-      # @whisq/* scope. The whisq scope must stay internally consistent;
-      # create-whisq can lag until its token is wired up.
-      - name: Publish @whisq/* to npm
-        if: inputs.dry_run != 'true' && startsWith(github.ref, 'refs/tags/v')
-        run: pnpm --filter "@whisq/*" publish --access public --no-git-checks --provenance
+      - name: Create release PR or publish
+        id: changesets
+        uses: changesets/action@v1
+        with:
+          version: pnpm version
+          publish: pnpm release
+          title: "chore: release packages"
+          commit: "chore: release packages"
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Publish create-whisq to npm
-        if: inputs.dry_run != 'true' && startsWith(github.ref, 'refs/tags/v')
-        continue-on-error: true
-        run: pnpm --filter create-whisq publish --access public --no-git-checks --provenance
-        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Create GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: steps.changesets.outputs.published == 'true'
         uses: actions/github-script@v9
+        env:
+          PUBLISHED_PACKAGES: ${{ steps.changesets.outputs.publishedPackages }}
         with:
           script: |
-            const tag = context.ref.replace('refs/tags/', '');
-            const isPrerelease = tag.includes('alpha') || tag.includes('beta') || tag.includes('rc');
-
-            await github.rest.repos.createRelease({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              tag_name: tag,
-              name: tag,
-              generate_release_notes: true,
-              prerelease: isPrerelease,
-            });
+            const published = JSON.parse(process.env.PUBLISHED_PACKAGES || "[]");
+            const core = published.find((p) => p.name === "@whisq/core");
+            if (!core) {
+              console.log("No @whisq/core in published set — skipping GitHub Release.");
+              return;
+            }
+            const tag = `v${core.version}`;
+            const isPrerelease = /alpha|beta|rc/i.test(tag);
+            try {
+              await github.rest.repos.createRelease({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                tag_name: tag,
+                name: tag,
+                generate_release_notes: true,
+                prerelease: isPrerelease,
+              });
+              console.log(`Created GitHub Release ${tag}`);
+            } catch (e) {
+              if (e.status === 422) {
+                console.log(`GitHub Release ${tag} already exists, skipping.`);
+                return;
+              }
+              throw e;
+            }
