@@ -16,10 +16,13 @@ on:
       tag:
         description: Release tag to simulate (e.g. v0.1.0-alpha.5)
         required: true
+        type: string
         default: test-dispatch
       body:
         description: Release notes markdown (optional)
         required: false
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -38,16 +41,38 @@ jobs:
           owner: whisqjs
           repositories: whisq.dev
 
+      - name: Build payload
+        id: payload
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_NAME: ${{ github.event.release.name }}
+          RELEASE_BODY: ${{ github.event.release.body }}
+          RELEASE_URL: ${{ github.event.release.html_url }}
+          INPUT_TAG: ${{ inputs.tag }}
+          INPUT_BODY: ${{ inputs.body }}
+        run: |
+          set -euo pipefail
+          TAG="${RELEASE_TAG:-$INPUT_TAG}"
+          NAME="${RELEASE_NAME:-}"
+          BODY="${RELEASE_BODY:-${INPUT_BODY:-}}"
+          URL="${RELEASE_URL:-}"
+          PAYLOAD=$(jq -nc \
+            --arg tag "$TAG" \
+            --arg name "$NAME" \
+            --arg body "$BODY" \
+            --arg html_url "$URL" \
+            '{tag: $tag, name: $name, body: $body, html_url: $html_url}')
+          {
+            echo "payload<<EOF"
+            echo "$PAYLOAD"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Send repository_dispatch
         uses: peter-evans/repository-dispatch@v3
         with:
           token: ${{ steps.app-token.outputs.token }}
           repository: whisqjs/whisq.dev
           event-type: framework-release
-          client-payload: |-
-            {
-              "tag": ${{ toJSON(github.event.release.tag_name || github.event.inputs.tag) }},
-              "name": ${{ toJSON(github.event.release.name) }},
-              "body": ${{ toJSON(github.event.release.body || github.event.inputs.body) }},
-              "html_url": ${{ toJSON(github.event.release.html_url) }}
-            }
+          client-payload: ${{ steps.payload.outputs.payload }}
