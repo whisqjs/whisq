@@ -1,78 +1,16 @@
 name: Notify docs on release
 
-# Fires a repository_dispatch event at whisqjs/whisq.dev whenever a
-# release is published here. The receiver over there
-# (.github/workflows/on-framework-release.yml) opens a tracking issue
-# with the release notes and a docs checklist.
-#
-# Design: whisqjs/whisq.dev#21.
-
 on:
-  release:
-    types: [published]
-  # Manual override for end-to-end testing without cutting a release.
   workflow_dispatch:
     inputs:
       tag:
-        description: Release tag to simulate (e.g. v0.1.0-alpha.5)
+        description: Tag
         required: true
-        type: string
         default: test-dispatch
-      body:
-        description: Release notes markdown (optional)
-        required: false
-        type: string
-        default: ""
-
-permissions:
-  contents: read
 
 jobs:
-  dispatch:
-    name: Dispatch to docs
+  hello:
     runs-on: ubuntu-latest
     steps:
-      - name: Mint app token
-        id: app-token
-        uses: actions/create-github-app-token@v1
-        with:
-          app-id: ${{ secrets.WHISQ_BOT_APP_ID }}
-          private-key: ${{ secrets.WHISQ_BOT_PRIVATE_KEY }}
-          owner: whisqjs
-          repositories: whisq.dev
-
-      - name: Build payload
-        id: payload
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
-          RELEASE_NAME: ${{ github.event.release.name }}
-          RELEASE_BODY: ${{ github.event.release.body }}
-          RELEASE_URL: ${{ github.event.release.html_url }}
-          INPUT_TAG: ${{ inputs.tag }}
-          INPUT_BODY: ${{ inputs.body }}
-        run: |
-          set -euo pipefail
-          TAG="${RELEASE_TAG:-$INPUT_TAG}"
-          NAME="${RELEASE_NAME:-}"
-          BODY="${RELEASE_BODY:-${INPUT_BODY:-}}"
-          URL="${RELEASE_URL:-}"
-          PAYLOAD=$(jq -nc \
-            --arg tag "$TAG" \
-            --arg name "$NAME" \
-            --arg body "$BODY" \
-            --arg html_url "$URL" \
-            '{tag: $tag, name: $name, body: $body, html_url: $html_url}')
-          {
-            echo "payload<<EOF"
-            echo "$PAYLOAD"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
-
-      - name: Send repository_dispatch
-        uses: peter-evans/repository-dispatch@v3
-        with:
-          token: ${{ steps.app-token.outputs.token }}
-          repository: whisqjs/whisq.dev
-          event-type: framework-release
-          client-payload: ${{ steps.payload.outputs.payload }}
+      - name: Echo
+        run: echo "hello, tag=${{ inputs.tag }}"
