@@ -28,7 +28,14 @@ type Child =
   | (() => Child | Child[])
   | Child[];
 
-type EventHandler<E extends Event = Event> = (event: E) => void;
+/**
+ * An event handler generic over the event type and the element the handler
+ * is attached to. The second parameter narrows `event.currentTarget` so
+ * `e.currentTarget.value` on an input handler typechecks without casts.
+ */
+type EventHandler<E extends Event = Event, T extends Element = Element> = (
+  event: E & { currentTarget: T },
+) => void;
 
 type ReactiveProp<T> = T | (() => T);
 
@@ -45,7 +52,18 @@ interface BaseProps {
   [key: `data-${string}`]: ReactiveProp<string | undefined>;
 }
 
-interface InputProps extends BaseProps {
+// Shared form-control event bundle, generic over the control's element type
+// so input/textarea/select each narrow `e.currentTarget` correctly.
+interface FormControlEvents<T extends Element> {
+  oninput?: EventHandler<InputEvent, T>;
+  onchange?: EventHandler<Event, T>;
+  onfocus?: EventHandler<FocusEvent, T>;
+  onblur?: EventHandler<FocusEvent, T>;
+  onkeydown?: EventHandler<KeyboardEvent, T>;
+  onkeyup?: EventHandler<KeyboardEvent, T>;
+}
+
+interface InputProps extends BaseProps, FormControlEvents<HTMLInputElement> {
   type?: string;
   value?: ReactiveProp<string | number>;
   checked?: ReactiveProp<boolean>;
@@ -58,54 +76,64 @@ interface InputProps extends BaseProps {
   step?: string | number;
   required?: boolean;
   autofocus?: boolean;
-  oninput?: EventHandler<InputEvent>;
-  onchange?: EventHandler;
-  onfocus?: EventHandler<FocusEvent>;
-  onblur?: EventHandler<FocusEvent>;
-  onkeydown?: EventHandler<KeyboardEvent>;
-  onkeyup?: EventHandler<KeyboardEvent>;
+}
+
+interface TextareaProps
+  extends BaseProps, FormControlEvents<HTMLTextAreaElement> {
+  value?: ReactiveProp<string>;
+  placeholder?: string;
+  disabled?: ReactiveProp<boolean>;
+  readonly?: ReactiveProp<boolean>;
+  name?: string;
+  rows?: number;
+  cols?: number;
+  required?: boolean;
 }
 
 interface SelectProps extends BaseProps {
   value?: ReactiveProp<string>;
   disabled?: ReactiveProp<boolean>;
   name?: string;
-  onchange?: EventHandler;
+  onchange?: EventHandler<Event, HTMLSelectElement>;
+  oninput?: EventHandler<InputEvent, HTMLSelectElement>;
 }
 
 interface CommonProps extends BaseProps {
-  onclick?: EventHandler<MouseEvent>;
-  ondblclick?: EventHandler<MouseEvent>;
-  onmouseenter?: EventHandler<MouseEvent>;
-  onmouseleave?: EventHandler<MouseEvent>;
-  onkeydown?: EventHandler<KeyboardEvent>;
-  onsubmit?: EventHandler<SubmitEvent>;
-  onfocus?: EventHandler<FocusEvent>;
-  onblur?: EventHandler<FocusEvent>;
+  onclick?: EventHandler<MouseEvent, HTMLElement>;
+  ondblclick?: EventHandler<MouseEvent, HTMLElement>;
+  onmouseenter?: EventHandler<MouseEvent, HTMLElement>;
+  onmouseleave?: EventHandler<MouseEvent, HTMLElement>;
+  onkeydown?: EventHandler<KeyboardEvent, HTMLElement>;
+  onsubmit?: EventHandler<SubmitEvent, HTMLElement>;
+  onfocus?: EventHandler<FocusEvent, HTMLElement>;
+  onblur?: EventHandler<FocusEvent, HTMLElement>;
   role?: string;
   tabindex?: number;
   draggable?: boolean;
 }
 
-interface FormProps extends CommonProps {
+interface FormProps extends Omit<CommonProps, "onsubmit"> {
   action?: string;
   method?: string;
   enctype?: string;
   novalidate?: boolean;
+  onsubmit?: EventHandler<SubmitEvent, HTMLFormElement>;
 }
 
-interface AnchorProps extends CommonProps {
+interface AnchorProps extends Omit<CommonProps, "onclick"> {
   href?: ReactiveProp<string>;
   target?: string;
   rel?: string;
+  onclick?: EventHandler<MouseEvent, HTMLAnchorElement>;
 }
 
-interface ImgProps extends CommonProps {
+interface ImgProps extends Omit<CommonProps, "onclick"> {
   src?: ReactiveProp<string>;
   alt?: string;
   width?: number | string;
   height?: number | string;
   loading?: "lazy" | "eager";
+  onclick?: EventHandler<MouseEvent, HTMLImageElement>;
 }
 
 interface OptionProps extends BaseProps {
@@ -344,7 +372,7 @@ export const input = createElement("input") as (
   props?: InputProps,
 ) => WhisqNode;
 export const textarea = createElement("textarea") as (
-  props?: InputProps | Child,
+  props?: TextareaProps | Child,
   ...children: Child[]
 ) => WhisqNode;
 export const select = createElement("select") as (
