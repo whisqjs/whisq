@@ -86,8 +86,14 @@ jobs:
         id: changesets
         uses: changesets/action@v1
         with:
-          version: pnpm version
-          publish: pnpm release
+          # Use `pnpm run <script>` because pnpm's built-in `pnpm version`
+          # command shadows our package.json script of the same name (same
+          # applies to `release`). Running through `pnpm run` dispatches to
+          # the script we actually want (`changeset version` + template sync
+          # for version; `pnpm build && pnpm test && changeset publish` for
+          # release).
+          version: pnpm run version
+          publish: pnpm run release
           title: "chore: release packages"
           commit: "chore: release packages"
         env:
