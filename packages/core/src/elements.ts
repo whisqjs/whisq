@@ -11,19 +11,11 @@
 // AI generates this correctly because it's just function calls.
 // ============================================================================
 
-import {
-  effect,
-  isSignal,
-  setEffectErrorHandler,
-  type Signal,
-} from "./reactive.js";
+import { effect, isSignal, setEffectErrorHandler } from "./reactive.js";
 import { reconcileKeyed, type KeyedEntry } from "./reconcile.js";
+import type { Ref } from "./ref.js";
 
 // ── Types ───────────────────────────────────────────────────────────────────
-
-type Ref<T extends HTMLElement = HTMLElement> =
-  | Signal<T | null>
-  | ((el: T | null) => void);
 
 type Child =
   | string
@@ -36,21 +28,42 @@ type Child =
   | (() => Child | Child[])
   | Child[];
 
-type EventHandler<E extends Event = Event> = (event: E) => void;
+/**
+ * An event handler generic over the event type and the element the handler
+ * is attached to. The second parameter narrows `event.currentTarget` so
+ * `e.currentTarget.value` on an input handler typechecks without casts.
+ */
+type EventHandler<E extends Event = Event, T extends Element = Element> = (
+  event: E & { currentTarget: T },
+) => void;
 
 type ReactiveProp<T> = T | (() => T);
+
+type StyleValue = string | number | null | undefined;
+export type StyleObject = Record<string, StyleValue | (() => StyleValue)>;
 
 interface BaseProps {
   ref?: Ref;
   class?: ReactiveProp<string | undefined>;
   id?: ReactiveProp<string | undefined>;
-  style?: ReactiveProp<string | undefined>;
+  style?: ReactiveProp<string | undefined> | StyleObject;
   hidden?: ReactiveProp<boolean>;
   title?: ReactiveProp<string | undefined>;
   [key: `data-${string}`]: ReactiveProp<string | undefined>;
 }
 
-interface InputProps extends BaseProps {
+// Shared form-control event bundle, generic over the control's element type
+// so input/textarea/select each narrow `e.currentTarget` correctly.
+interface FormControlEvents<T extends Element> {
+  oninput?: EventHandler<InputEvent, T>;
+  onchange?: EventHandler<Event, T>;
+  onfocus?: EventHandler<FocusEvent, T>;
+  onblur?: EventHandler<FocusEvent, T>;
+  onkeydown?: EventHandler<KeyboardEvent, T>;
+  onkeyup?: EventHandler<KeyboardEvent, T>;
+}
+
+interface InputProps extends BaseProps, FormControlEvents<HTMLInputElement> {
   type?: string;
   value?: ReactiveProp<string | number>;
   checked?: ReactiveProp<boolean>;
@@ -63,54 +76,64 @@ interface InputProps extends BaseProps {
   step?: string | number;
   required?: boolean;
   autofocus?: boolean;
-  oninput?: EventHandler<InputEvent>;
-  onchange?: EventHandler;
-  onfocus?: EventHandler<FocusEvent>;
-  onblur?: EventHandler<FocusEvent>;
-  onkeydown?: EventHandler<KeyboardEvent>;
-  onkeyup?: EventHandler<KeyboardEvent>;
+}
+
+interface TextareaProps
+  extends BaseProps, FormControlEvents<HTMLTextAreaElement> {
+  value?: ReactiveProp<string>;
+  placeholder?: string;
+  disabled?: ReactiveProp<boolean>;
+  readonly?: ReactiveProp<boolean>;
+  name?: string;
+  rows?: number;
+  cols?: number;
+  required?: boolean;
 }
 
 interface SelectProps extends BaseProps {
   value?: ReactiveProp<string>;
   disabled?: ReactiveProp<boolean>;
   name?: string;
-  onchange?: EventHandler;
+  onchange?: EventHandler<Event, HTMLSelectElement>;
+  oninput?: EventHandler<InputEvent, HTMLSelectElement>;
 }
 
 interface CommonProps extends BaseProps {
-  onclick?: EventHandler<MouseEvent>;
-  ondblclick?: EventHandler<MouseEvent>;
-  onmouseenter?: EventHandler<MouseEvent>;
-  onmouseleave?: EventHandler<MouseEvent>;
-  onkeydown?: EventHandler<KeyboardEvent>;
-  onsubmit?: EventHandler<SubmitEvent>;
-  onfocus?: EventHandler<FocusEvent>;
-  onblur?: EventHandler<FocusEvent>;
+  onclick?: EventHandler<MouseEvent, HTMLElement>;
+  ondblclick?: EventHandler<MouseEvent, HTMLElement>;
+  onmouseenter?: EventHandler<MouseEvent, HTMLElement>;
+  onmouseleave?: EventHandler<MouseEvent, HTMLElement>;
+  onkeydown?: EventHandler<KeyboardEvent, HTMLElement>;
+  onsubmit?: EventHandler<SubmitEvent, HTMLElement>;
+  onfocus?: EventHandler<FocusEvent, HTMLElement>;
+  onblur?: EventHandler<FocusEvent, HTMLElement>;
   role?: string;
   tabindex?: number;
   draggable?: boolean;
 }
 
-interface FormProps extends CommonProps {
+interface FormProps extends Omit<CommonProps, "onsubmit"> {
   action?: string;
   method?: string;
   enctype?: string;
   novalidate?: boolean;
+  onsubmit?: EventHandler<SubmitEvent, HTMLFormElement>;
 }
 
-interface AnchorProps extends CommonProps {
+interface AnchorProps extends Omit<CommonProps, "onclick"> {
   href?: ReactiveProp<string>;
   target?: string;
   rel?: string;
+  onclick?: EventHandler<MouseEvent, HTMLAnchorElement>;
 }
 
-interface ImgProps extends CommonProps {
+interface ImgProps extends Omit<CommonProps, "onclick"> {
   src?: ReactiveProp<string>;
   alt?: string;
   width?: number | string;
   height?: number | string;
   loading?: "lazy" | "eager";
+  onclick?: EventHandler<MouseEvent, HTMLImageElement>;
 }
 
 interface OptionProps extends BaseProps {
@@ -164,6 +187,11 @@ export function h(
             (value as (el: HTMLElement | null) => void)(null);
           });
         }
+        continue;
+      }
+      if (key === "style" && isPlainStyleObject(value)) {
+        // Style object — per-property reactive subscriptions
+        applyStyleObject(el as HTMLElement, value, disposers);
         continue;
       }
       if (key.startsWith("on") && typeof value === "function") {
@@ -344,7 +372,7 @@ export const input = createElement("input") as (
   props?: InputProps,
 ) => WhisqNode;
 export const textarea = createElement("textarea") as (
-  props?: InputProps | Child,
+  props?: TextareaProps | Child,
   ...children: Child[]
 ) => WhisqNode;
 export const select = createElement("select") as (
@@ -496,6 +524,46 @@ export function when(
   otherwise?: () => WhisqNode | string | null,
 ): () => Child {
   return () => (condition() ? then() : otherwise ? otherwise() : null);
+}
+
+// ── match() — Multi-branch conditional rendering ───────────────────────────
+
+type MatchRender = () => WhisqNode | string | null;
+type MatchBranch = readonly [() => boolean, MatchRender];
+
+/**
+ * Multi-branch conditional renderer. Evaluates branches in order and renders
+ * the first whose predicate returns truthy. An optional trailing fallback
+ * (a bare render function, not wrapped in a tuple) renders when no branch
+ * matches. Re-evaluates reactively like other children.
+ *
+ * ```ts
+ * div(
+ *   match(
+ *     [() => users.loading(),    () => p("Loading...")],
+ *     [() => !!users.error(),    () => p({ class: "error" }, users.error()!.message)],
+ *     [() => !!users.data(),     () => List({ items: users.data()! })],
+ *     () => p("No data yet."), // fallback
+ *   ),
+ * )
+ * ```
+ *
+ * First-true-wins: if two predicates are true, only the earlier branch renders.
+ */
+export function match(...branches: MatchBranch[]): () => Child;
+export function match(...args: [...MatchBranch[], MatchRender]): () => Child;
+export function match(...args: Array<MatchBranch | MatchRender>): () => Child {
+  const last = args[args.length - 1];
+  const hasFallback = typeof last === "function";
+  const fallback = hasFallback ? (last as MatchRender) : undefined;
+  const branches = (hasFallback ? args.slice(0, -1) : args) as MatchBranch[];
+
+  return () => {
+    for (const [predicate, render] of branches) {
+      if (predicate()) return render();
+    }
+    return fallback ? fallback() : null;
+  };
 }
 
 // ── each() — List rendering ────────────────────────────────────────────────
@@ -786,6 +854,42 @@ export function mount(node: WhisqNode, container: Element): () => void {
 }
 
 // ── Internal ────────────────────────────────────────────────────────────────
+
+function isPlainStyleObject(value: unknown): value is StyleObject {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+}
+
+function camelToKebab(str: string): string {
+  return str.replace(/[A-Z]/g, (m) => `-${m.toLowerCase()}`);
+}
+
+function applyStyleObject(
+  el: HTMLElement,
+  style: StyleObject,
+  disposers: (() => void)[],
+): void {
+  for (const [prop, raw] of Object.entries(style)) {
+    const cssProp = prop.startsWith("--") ? prop : camelToKebab(prop);
+    if (typeof raw === "function") {
+      const getter = raw as () => StyleValue;
+      const dispose = effect(() => {
+        const v = getter();
+        if (v == null || v === "") {
+          el.style.removeProperty(cssProp);
+        } else {
+          el.style.setProperty(cssProp, String(v));
+        }
+      });
+      disposers.push(dispose);
+    } else if (raw != null && raw !== "") {
+      el.style.setProperty(cssProp, String(raw));
+    }
+  }
+}
 
 function applyProp(el: Element, key: string, value: unknown): void {
   if (key === "class") {

@@ -241,4 +241,159 @@ describe("resource()", () => {
       expect(r.data()).toBe(2);
     });
   });
+
+  // ── mutate() ───────────────────────────────────────────────────────────
+
+  it("mutate(value) sets data synchronously without fetching", async () => {
+    const r = resource(() => Promise.resolve("fetched"));
+    await vi.waitFor(() => expect(r.loading()).toBe(false));
+
+    r.mutate("optimistic");
+    expect(r.data()).toBe("optimistic");
+  });
+
+  it("mutate(updater) receives the previous value", async () => {
+    const r = resource<number[]>(() => Promise.resolve([1, 2, 3]));
+    await vi.waitFor(() => expect(r.loading()).toBe(false));
+
+    r.mutate((prev) => [...(prev ?? []), 4]);
+    expect(r.data()).toEqual([1, 2, 3, 4]);
+  });
+
+  // ── initialValue ───────────────────────────────────────────────────────
+
+  it("initialValue populates data() before the first fetch resolves", () => {
+    const r = resource(() => Promise.resolve("late"), {
+      initialValue: "early",
+    });
+    expect(r.data()).toBe("early");
+    expect(r.loading()).toBe(true);
+  });
+
+  it("initialValue is replaced by the fetched value", async () => {
+    const r = resource(() => Promise.resolve("late"), {
+      initialValue: "early",
+    });
+    await vi.waitFor(() => expect(r.loading()).toBe(false));
+    expect(r.data()).toBe("late");
+  });
+
+  // ── keepPrevious ───────────────────────────────────────────────────────
+
+  it("keeps the previous value during refetch by default", async () => {
+    let nth = 0;
+    const r = resource(() => Promise.resolve(++nth));
+    await vi.waitFor(() => expect(r.loading()).toBe(false));
+    expect(r.data()).toBe(1);
+
+    r.refetch();
+    expect(r.data()).toBe(1); // still visible during refetch
+    await vi.waitFor(() => expect(r.data()).toBe(2));
+  });
+
+  it("resets data to undefined during refetch when keepPrevious is false", async () => {
+    let nth = 0;
+    const r = resource(() => Promise.resolve(++nth), { keepPrevious: false });
+    await vi.waitFor(() => expect(r.loading()).toBe(false));
+    expect(r.data()).toBe(1);
+
+    r.refetch();
+    expect(r.data()).toBeUndefined();
+    await vi.waitFor(() => expect(r.data()).toBe(2));
+  });
+
+  // ── AbortSignal ────────────────────────────────────────────────────────
+
+  it("passes an AbortSignal to the fetcher", async () => {
+    let captured: AbortSignal | undefined;
+    const r = resource(({ signal }) => {
+      captured = signal;
+      return Promise.resolve("ok");
+    });
+    await vi.waitFor(() => expect(r.loading()).toBe(false));
+    expect(captured).toBeInstanceOf(AbortSignal);
+    expect(captured!.aborted).toBe(false);
+  });
+
+  it("aborts the previous signal when refetch is called", async () => {
+    const signals: AbortSignal[] = [];
+    const r = resource(({ signal }) => {
+      signals.push(signal);
+      return new Promise<string>((resolve) =>
+        setTimeout(() => resolve("done"), 20),
+      );
+    });
+    r.refetch();
+    await vi.waitFor(() => expect(r.data()).toBe("done"));
+    expect(signals[0].aborted).toBe(true);
+    expect(signals[signals.length - 1].aborted).toBe(false);
+  });
+
+  it("drops stale responses — newer fetch always wins", async () => {
+    const fetches: Array<(v: string) => void> = [];
+    const r = resource(
+      () =>
+        new Promise<string>((resolve) => {
+          fetches.push(resolve);
+        }),
+    );
+    r.refetch();
+    // Resolve the second (newer) fetch first, then the first (stale).
+    fetches[1]("new");
+    await vi.waitFor(() => expect(r.data()).toBe("new"));
+    fetches[0]("old");
+    await new Promise((r) => setTimeout(r, 0));
+    expect(r.data()).toBe("new");
+  });
+
+  it("does not surface an AbortError when a fetch is cancelled", async () => {
+    const r = resource(
+      ({ signal }) =>
+        new Promise<string>((resolve, reject) => {
+          signal.addEventListener("abort", () =>
+            reject(new Error("AbortError")),
+          );
+          setTimeout(() => resolve("done"), 20);
+        }),
+    );
+    r.refetch();
+    await vi.waitFor(() => expect(r.data()).toBe("done"));
+    expect(r.error()).toBeUndefined();
+  });
+
+  // ── source ─────────────────────────────────────────────────────────────
+
+  it("re-runs the fetcher when the source signal changes", async () => {
+    const id = signal(1);
+    const seen: number[] = [];
+    const r = resource(
+      (src: number) => {
+        seen.push(src);
+        return Promise.resolve(`user-${src}`);
+      },
+      { source: () => id.value },
+    );
+    await vi.waitFor(() => expect(r.data()).toBe("user-1"));
+
+    id.value = 2;
+    await vi.waitFor(() => expect(r.data()).toBe("user-2"));
+    expect(seen).toEqual([1, 2]);
+  });
+
+  it("passes source as the first fetcher arg and signal as the second", async () => {
+    const id = signal("abc");
+    let capturedSrc: string | undefined;
+    let capturedSignal: AbortSignal | undefined;
+    const r = resource(
+      (src: string, { signal }) => {
+        capturedSrc = src;
+        capturedSignal = signal;
+        return Promise.resolve(`ok-${src}`);
+      },
+      { source: () => id.value },
+    );
+    await vi.waitFor(() => expect(r.data()).toBe("ok-abc"));
+    expect(capturedSrc).toBe("abc");
+    expect(capturedSignal).toBeInstanceOf(AbortSignal);
+  });
 });

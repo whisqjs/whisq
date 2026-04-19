@@ -1,6 +1,6 @@
 {
   "name": "@whisq/core",
-  "version": "0.1.0-alpha.4",
+  "version": "0.1.0-alpha.5",
   "description": "The AI-native JavaScript framework that senses what you mean — reactive signals, templates, and components",
   "type": "module",
   "main": "./dist/index.js",
@@ -10,6 +10,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./collections": {
+      "types": "./dist/collections.d.ts",
+      "import": "./dist/collections.js"
     }
   },
   "files": [
@@ -17,8 +21,8 @@
     "README.md"
   ],
   "scripts": {
-    "build": "tsc",
-    "dev": "tsc --watch",
+    "build": "tsc -p tsconfig.build.json && node scripts/generate-public-api.mjs",
+    "dev": "tsc --watch -p tsconfig.build.json",
     "test": "vitest run --passWithNoTests",
     "size": "size-limit",
     "bench": "tsx bench/signal-throughput.ts",

@@ -1,0 +1,107 @@
+name: Release — prepare
+
+# Step 1 of the release flow: on `develop`, roll up all pending changesets
+# into a `release/v<version>` branch and open a PR to `main`.
+#
+# Triggered manually so releases are explicit. When you're ready to cut a
+# release, go to Actions → "Release — prepare" → Run workflow. The job:
+#
+#   1. Verifies there's at least one pending changeset to release.
+#   2. Runs `pnpm run version` which applies all changesets (bumps versions
+#      in every package.json, writes CHANGELOG entries, deletes consumed
+#      changeset files, syncs create-whisq templates).
+#   3. Commits those changes to a new `release/v<version>` branch.
+#   4. Opens a PR from that branch into `main`.
+#
+# Merging the release PR into `main` triggers `.github/workflows/release.yml`
+# which does the npm publish + tagging + back-merge-to-develop PR.
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: release-prepare
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mint WHISQ_BOT app token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.WHISQ_BOT_APP_ID }}
+          private-key: ${{ secrets.WHISQ_BOT_PRIVATE_KEY }}
+          owner: whisqjs
+          repositories: whisq
+
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: develop
+          token: ${{ steps.app-token.outputs.token }}
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Verify pending changesets exist
+        run: |
+          count=$(find .changeset -maxdepth 1 -type f -name '*.md' ! -name 'README.md' | wc -l | tr -d ' ')
+          if [ "$count" = "0" ]; then
+            echo "::error::No pending changesets on develop. Nothing to release."
+            exit 1
+          fi
+          echo "Found $count pending changeset(s)."
+
+      - name: Apply changesets (bump versions + write CHANGELOGs)
+        run: pnpm run version
+
+      - name: Determine new version
+        id: ver
+        run: echo "version=$(node -p "require('./packages/core/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Commit and push release branch
+        run: |
+          git config user.name "whisq-bot[bot]"
+          git config user.email "whisq-bot[bot]@users.noreply.github.com"
+          BRANCH="release/v${{ steps.ver.outputs.version }}"
+          git checkout -b "$BRANCH"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "::error::pnpm run version produced no changes — aborting."
+            exit 1
+          fi
+          git commit -m "chore: release v${{ steps.ver.outputs.version }}"
+          git push -u origin "$BRANCH"
+
+      - name: Open release PR to main
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          gh pr create \
+            --base main \
+            --head "release/v${{ steps.ver.outputs.version }}" \
+            --title "chore: release v${{ steps.ver.outputs.version }}" \
+            --label "skip-changeset" \
+            --body "$(cat <<EOF
+          Automated release PR for **v${{ steps.ver.outputs.version }}**.
+
+          Merging this PR into \`main\` triggers the publish workflow:
+          - \`pnpm run release\` publishes all bumped packages to npm with provenance
+          - changesets/action creates per-package git tags and GitHub Releases
+          - A follow-up PR will be opened to back-merge \`main\` → \`develop\`
+
+          See each package's \`CHANGELOG.md\` (in the diff) for what's shipping.
+          EOF
+          )"
