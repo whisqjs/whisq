@@ -105,7 +105,8 @@ export { ref } from "./ref.js";
 export type { Ref } from "./ref.js";
 
 // Styling
-export { sheet, styles, cx, rcx, theme } from "./styling.js";
+export { sheet, styles, cx, rcx, sx, theme } from "./styling.js";
+export type { StyleObject } from "./elements.js";
 
 // Forms
 export { bind } from "./bind.js";
