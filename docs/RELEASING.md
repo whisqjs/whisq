@@ -43,7 +43,7 @@ It:
 
 ### 2. Review and merge the release PR into `main`
 
-The PR body shows the version bumps and each package's CHANGELOG diff. If something looks wrong, close the PR and the release branch; your pending changesets on `develop` are untouched. If it looks right, **squash-merge** it.
+The PR body shows the version bumps and each package's CHANGELOG diff. If something looks wrong, close the PR and the release branch; your pending changesets on `develop` are untouched. If it looks right, **use a merge commit (not squash)** — `main` keeps the full history of every feature that made it into the release.
 
 ### 3. Automated publish
 
@@ -55,7 +55,18 @@ Merging to `main` triggers `.github/workflows/release.yml`:
 
 ### 4. Merge the back-merge PR into `develop`
 
-Title: `chore: back-merge main → develop after v<version>`. Carries the `skip-changeset` label. Squash-merge it to bring the version bumps and CHANGELOG updates into `develop`. Your next feature branch starts from the released state.
+Title: `chore: back-merge main → develop after v<version>`. Carries the `skip-changeset` label. **Squash-merge** it so `develop` gets a single "back-merge" commit — `develop` stays clean and linear at one commit per merged PR.
+
+## Merge style per branch
+
+Whisq deliberately uses different merge styles for `develop` and `main`:
+
+| Target                                                             | Style            | Why                                                                                                                                      |
+| ------------------------------------------------------------------ | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| PRs into `develop` (all PRs — features, fixes, chore, back-merges) | **Squash**       | Each PR collapses into a single commit on `develop` — clean, linear, easy to scan.                                                       |
+| PRs into `main` (release PRs only)                                 | **Merge commit** | Preserves the history of every feature that made it into the release, so `git log main` shows every squashed PR as an individual commit. |
+
+This is convention, not enforced by GitHub — pick the right option from the dropdown on the green merge button.
 
 ## One-time setup (already done, documented for future maintainers)
 
