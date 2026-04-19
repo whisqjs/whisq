@@ -274,48 +274,131 @@ export interface Resource<T> {
   loading: () => boolean;
   error: () => Error | undefined;
   refetch: () => void;
+  /**
+   * Synchronously set the resource's data without fetching. Useful for
+   * optimistic updates — "add todo immediately, roll back on error."
+   * Accepts a value or an updater function that receives the previous value.
+   */
+  mutate: (next: T | ((prev: T | undefined) => T)) => void;
 }
 
+export interface ResourceOptions<T> {
+  /** Initial value for `data()` before the first fetch resolves. */
+  initialValue?: T;
+  /**
+   * If true (default), `data()` holds the previous value during refetches.
+   * If false, `data()` resets to `undefined` while a refetch is in flight.
+   */
+  keepPrevious?: boolean;
+}
+
+export interface ResourceSourceOptions<T, S> extends ResourceOptions<T> {
+  /** Reactive source — fetcher re-runs when this signal changes. */
+  source: () => S;
+}
+
+type Fetcher<T, S> =
+  | ((opts: { signal: AbortSignal }) => Promise<T>)
+  | ((source: S, opts: { signal: AbortSignal }) => Promise<T>);
+
 /**
- * Fetch async data with reactive loading/error states.
+ * Fetch async data with reactive loading/error states, cancellation,
+ * optimistic mutation, and optional reactive source dependencies.
  *
  * ```ts
- * const users = resource(() =>
- *   fetch("/api/users").then(r => r.json())
+ * // Simple fetch
+ * const users = resource(({ signal }) =>
+ *   fetch("/api/users", { signal }).then(r => r.json())
  * );
  *
- * // In template:
- * html`
- *   ${() => users.loading() ? "Loading..." : ""}
- *   ${() => users.error() ? users.error().message : ""}
- *   ${() => users.data()?.map(u => html`<p>${u.name}</p>`)}
- * `;
+ * // Dependent on a route param
+ * const user = resource(
+ *   (id, { signal }) => fetch(`/api/users/${id}`, { signal }).then(r => r.json()),
+ *   { source: () => route.params.value.id }
+ * );
+ *
+ * // Optimistic update
+ * users.mutate(prev => [...(prev ?? []), newUser]);
  * ```
+ *
+ * - `{ signal }` aborts on refetch and when a newer request starts.
+ * - Stale responses are dropped (a newer fetch always wins).
+ * - `data()` preserves the previous value during refetch by default;
+ *   set `keepPrevious: false` to reset to `undefined`.
  */
-export function resource<T>(fetcher: () => Promise<T>): Resource<T> {
-  const data = signal<T | undefined>(undefined);
+export function resource<T>(
+  fetcher: (opts: { signal: AbortSignal }) => Promise<T>,
+  options?: ResourceOptions<T>,
+): Resource<T>;
+export function resource<T, S>(
+  fetcher: (source: S, opts: { signal: AbortSignal }) => Promise<T>,
+  options: ResourceSourceOptions<T, S>,
+): Resource<T>;
+export function resource<T, S = undefined>(
+  fetcher: Fetcher<T, S>,
+  options?: ResourceOptions<T> | ResourceSourceOptions<T, S>,
+): Resource<T> {
+  const data = signal<T | undefined>(options?.initialValue);
   const loading = signal(true);
   const error = signal<Error | undefined>(undefined);
+  const keepPrevious = options?.keepPrevious !== false;
+  const sourceFn = options && "source" in options ? options.source : undefined;
+
+  let currentController: AbortController | null = null;
+  let requestId = 0;
 
   const execute = async () => {
+    currentController?.abort();
+    const controller = new AbortController();
+    currentController = controller;
+    const myId = ++requestId;
+
     loading.value = true;
     error.value = undefined;
+    if (!keepPrevious) data.value = undefined;
+
     try {
-      data.value = await fetcher();
+      const opts = { signal: controller.signal };
+      const result = sourceFn
+        ? await (fetcher as (s: S, o: typeof opts) => Promise<T>)(
+            sourceFn(),
+            opts,
+          )
+        : await (fetcher as (o: typeof opts) => Promise<T>)(opts);
+
+      if (myId === requestId) {
+        data.value = result;
+      }
     } catch (e) {
+      if (myId !== requestId || controller.signal.aborted) return;
       error.value = e instanceof Error ? e : new Error(String(e));
     } finally {
-      loading.value = false;
+      if (myId === requestId) {
+        loading.value = false;
+      }
     }
   };
 
-  execute();
+  if (sourceFn) {
+    effect(() => {
+      sourceFn();
+      execute();
+    });
+  } else {
+    execute();
+  }
 
   return {
     data: () => data.value,
     loading: () => loading.value,
     error: () => error.value,
     refetch: execute,
+    mutate: (next) => {
+      data.value =
+        typeof next === "function"
+          ? (next as (prev: T | undefined) => T)(data.value)
+          : next;
+    },
   };
 }
 
