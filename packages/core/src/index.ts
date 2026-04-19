@@ -14,6 +14,10 @@
 export { signal, computed, effect, batch } from "./reactive.js";
 export type { Signal, ReadonlySignal } from "./reactive.js";
 
+// Reactive collections
+export { signalMap, signalSet } from "./collections.js";
+export type { SignalMap, SignalSet } from "./collections.js";
+
 // Element functions (primary API)
 export {
   // Core
