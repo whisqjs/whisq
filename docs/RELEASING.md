@@ -1,71 +1,111 @@
 # Releasing Whisq
 
-> How Whisq publishes new versions to npm. The short version: you don't. Merging changesets into `develop` does it for you.
+> How Whisq publishes new versions. The short version: you merge a changeset, click "Run workflow" on _Release — prepare_, review and merge the resulting release PR into `main`, then merge the back-merge PR into `develop`. Two clicks.
 
 ---
 
-## Day-to-day: add a changeset to every PR
+## The branch flow
 
-Every PR that changes code users can observe in `node_modules/@whisq/*` must include a changeset. The `changeset-check` workflow fails PRs that forget one (bypass with the `skip-changeset` label for docs, repo tooling, or no-op dep bumps).
+```
+feature/*  →  develop  →  release/v<version>  →  main  →  (back-merge)  →  develop
+```
+
+- **`feature/*` / `bugfix/*` / `chore/*`** branches → PR to `develop` (every PR carries a changeset or the `skip-changeset` label)
+- **`develop`** accumulates merged changesets
+- **`release/v<version>`** is cut from `develop` by the _Release — prepare_ workflow when you want to ship
+- **`main`** is production: merging the release PR here triggers npm publish
+- **Back-merge PR** from `main` → `develop` brings the version bumps home
+
+Nobody edits `package.json` versions by hand. The workflows do it.
+
+## Day-to-day: add a changeset to every PR
 
 ```bash
 pnpm changeset
 ```
 
-Answer the prompts — which packages changed, and whether the change is `patch` / `minor` / `major`. We're currently in **alpha pre mode** (`.changeset/pre.json` is present), so any bump becomes `0.1.0-alpha.N → 0.1.0-alpha.N+1`. The tool writes a small `.changeset/<slug>.md` file. Commit it alongside your code.
+Answer the prompts. Commit the generated `.changeset/<slug>.md` alongside your code. We're in **alpha pre mode** (`.changeset/pre.json` is present), so any bump resolves as `0.1.0-alpha.N → 0.1.0-alpha.N+1`.
 
-## What happens after merge to `develop`
+The `changeset-check` workflow fails PRs without a changeset unless they carry the `skip-changeset` label (docs, repo tooling, dep bumps with no API impact).
 
-The Release workflow (`.github/workflows/release.yml`) runs on every push to `develop`:
+## Cutting a release
 
-1. **If there are pending changeset files**, it opens (or updates) a PR titled **"chore: release packages"**. This PR shows the version bumps and CHANGELOG entries that will ship. Nothing has been published yet.
-2. **If the release PR just got merged** (so the push contains version-bumped `package.json` files and consumed changesets are gone), it runs `pnpm release` which:
-   - publishes each bumped package to npm with `--provenance`,
-   - creates a git tag per package,
-   - creates a GitHub Release for `@whisq/core` with auto-generated notes.
+### 1. Open _Release — prepare_
 
-So the entire human workflow is: write code, run `pnpm changeset`, commit, open PR, merge. Later, review and merge the auto-opened release PR.
+**Actions → Release — prepare → Run workflow** (on `develop`).
 
-## One-time setup (already done, documented here so future maintainers can reproduce)
+It:
+
+- verifies there's at least one pending changeset on `develop`
+- runs `pnpm run version` (applies all pending changesets, bumps every affected `package.json`, writes CHANGELOG entries, syncs create-whisq templates)
+- creates a `release/v<new-version>` branch with a single "chore: release v<version>" commit
+- opens a PR from that branch into `main`
+
+### 2. Review and merge the release PR into `main`
+
+The PR body shows the version bumps and each package's CHANGELOG diff. If something looks wrong, close the PR and the release branch; your pending changesets on `develop` are untouched. If it looks right, **use a merge commit (not squash)** — `main` keeps the full history of every feature that made it into the release.
+
+### 3. Automated publish
+
+Merging to `main` triggers `.github/workflows/release.yml`:
+
+- re-runs build + test + version-consistency + bundle-size
+- runs `pnpm run release` via `changesets/action` — publishes every bumped package to npm with `--provenance`, creates per-package git tags (`@whisq/core@<version>` etc.), and creates a GitHub Release per tag with auto-generated notes
+- opens a back-merge PR from `main` into `develop`
+
+### 4. Merge the back-merge PR into `develop`
+
+Title: `chore: back-merge main → develop after v<version>`. Carries the `skip-changeset` label. **Squash-merge** it so `develop` gets a single "back-merge" commit — `develop` stays clean and linear at one commit per merged PR.
+
+## Merge style per branch
+
+Whisq deliberately uses different merge styles for `develop` and `main`:
+
+| Target                                                             | Style            | Why                                                                                                                                      |
+| ------------------------------------------------------------------ | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| PRs into `develop` (all PRs — features, fixes, chore, back-merges) | **Squash**       | Each PR collapses into a single commit on `develop` — clean, linear, easy to scan.                                                       |
+| PRs into `main` (release PRs only)                                 | **Merge commit** | Preserves the history of every feature that made it into the release, so `git log main` shows every squashed PR as an individual commit. |
+
+This is convention, not enforced by GitHub — pick the right option from the dropdown on the green merge button.
+
+## One-time setup (already done, documented for future maintainers)
 
 ### `WHISQ_BOT` GitHub App
 
-The enterprise policy blocks the runner's built-in `GITHUB_TOKEN` from creating pull requests. The Release workflow uses the `WHISQ_BOT` installation token instead. This requires:
+Both release workflows use a `WHISQ_BOT` app installation token because the runner's default `GITHUB_TOKEN` is blocked at the enterprise level from creating pull requests.
 
-- **Secrets** on `whisqjs/whisq`:
-  - `WHISQ_BOT_APP_ID`
-  - `WHISQ_BOT_PRIVATE_KEY`
-- **App permissions** on `whisqjs/whisq`:
-  - Contents: **Read & Write**
-  - Pull requests: **Read & Write**
-  - Metadata: **Read**
+- **Secrets** on `whisqjs/whisq`: `WHISQ_BOT_APP_ID`, `WHISQ_BOT_PRIVATE_KEY`
+- **App permissions** on `whisqjs/whisq`: Contents R/W, Pull requests R/W, Metadata R
+- **Repository access**: `whisq` must be in the app's selected repositories
 
-To (re)grant those permissions: go to github.com/organizations/whisqjs/settings/installations, find the WHISQ_BOT app, ensure `whisq` is in the selected repos, and confirm the three scopes above.
+Grant/re-grant via github.com/organizations/whisqjs/settings/installations → WHISQ_BOT → Configure.
 
 ### Allowed third-party actions
 
-`changesets/action@*` and `pnpm/action-setup@*` are allowed via `Settings → Actions → General → Allow select actions and reusable workflows`. `actions/create-github-app-token` is GitHub-owned so it's allowed by default.
+`changesets/action@*` and `pnpm/action-setup@*` are allowed via Settings → Actions → General → Allow select actions. `actions/create-github-app-token` is GitHub-owned so it's allowed by default.
 
-### Branch protection on `develop`
+### Branch protection
 
-Requires PR, all 6 CI checks, no force-push, no deletion. The WHISQ_BOT app is **not** an admin — it cannot push directly to `develop`. That's why we use the release-PR flow (the PR goes through normal merge, not a direct push).
+- `main`: PR required, all CI checks, conversation resolution, no force-push, no deletion.
+- `develop`: PR required, all CI checks, no force-push, no deletion.
+- The WHISQ_BOT app can push feature-like branches (`release/*`, `chore/backmerge-*`) but cannot push directly to `main` or `develop` — that's why everything happens through PRs.
 
 ## Exiting pre mode
 
-When ready to cut a `0.1.0` stable:
+When the API is stable enough to drop `-alpha`:
 
 ```bash
 pnpm changeset pre exit
 ```
 
-Commit the deleted `.changeset/pre.json` in a PR. After that, bumps resolve as normal semver — the next release will be `0.1.0`, then `0.1.1` / `0.2.0` / etc.
+Commit the deletion of `.changeset/pre.json` on a feature branch, PR to develop, merge. After that, the next _Release — prepare_ will produce a normal semver version (e.g. `0.1.0`).
 
 ## Emergency manual override
 
-If the automation is broken (e.g. npm outage, bad app token, enterprise policy change), re-run via `workflow_dispatch` on the Release workflow. If that also fails:
+Both release workflows also accept `workflow_dispatch`. If the automation is broken entirely:
 
 ```bash
-# On develop, with a clean working tree and no pending changesets:
+# On a release/v<version> branch checked out locally, with no pending changesets:
 pnpm install --frozen-lockfile
 pnpm build
 pnpm test
@@ -80,7 +120,7 @@ Requires `NPM_TOKEN` in your environment or `npm login` with 2FA.
 npm view @whisq/core version
 npm view create-whisq version
 
-# Fresh install sanity check:
+# Fresh-install sanity:
 mkdir /tmp/whisq-sanity && cd /tmp/whisq-sanity
 npm init -y
 npm install @whisq/core
@@ -88,12 +128,13 @@ npm install @whisq/core
 
 ## Troubleshooting
 
-| Symptom                                                                         | Likely cause                                           | Fix                                                                                            |
-| ------------------------------------------------------------------------------- | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
-| Release workflow `startup_failure`                                              | New third-party action not allowlisted                 | Add to `Settings → Actions → General → Allow select actions`                                   |
-| `HttpError: GitHub Actions is not permitted to create or approve pull requests` | Using runner's `GITHUB_TOKEN` instead of the app token | Ensure `GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}` is on the `changesets/action` step |
-| `Resource not accessible by integration`                                        | WHISQ_BOT app lacks `pull_requests:write` on this repo | Re-grant the permission in the app's installation settings                                     |
-| `403 Forbidden` on publish                                                      | `NPM_TOKEN` expired or revoked                         | Rotate the secret                                                                              |
-| Provenance error                                                                | Missing `id-token: write` permission                   | Already set at the workflow level                                                              |
-| Tag already exists                                                              | Release was re-run after a partial success             | Delete the tag on GitHub if it's wrong, or move on — publishing is idempotent per-version      |
-| Version conflict between packages                                               | Someone hand-edited `package.json`                     | `node scripts/check-versions.mjs` to diagnose; re-run `pnpm version` after fixing              |
+| Symptom                                                                         | Likely cause                                                 | Fix                                                                                                                                                  |
+| ------------------------------------------------------------------------------- | ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| _Release — prepare_ errors with "No pending changesets on develop"              | No `.changeset/*.md` accumulated since last release          | Merge a PR that adds a changeset, or run `pnpm changeset` on a throwaway branch first                                                                |
+| Release workflow `startup_failure`                                              | New third-party action not allowlisted                       | Add to Settings → Actions → General → Allow select actions                                                                                           |
+| `HttpError: GitHub Actions is not permitted to create or approve pull requests` | Using runner's `GITHUB_TOKEN` instead of the app token       | Ensure `GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}` on all PR-creating steps                                                                 |
+| `Resource not accessible by integration`                                        | WHISQ_BOT app lacks `pull_requests:write` on this repo       | Re-grant the permission in the app's installation settings                                                                                           |
+| `403 Forbidden` on publish                                                      | `NPM_TOKEN` expired or revoked                               | Rotate the secret                                                                                                                                    |
+| `Package size limit has exceeded` on release run                                | A merged feature pushed `@whisq/core` past 5 KB gzipped      | Move the added code behind a sub-path export (like `@whisq/core/collections`), or bump the limit in `packages/core/package.json` `size-limit` config |
+| Tag already exists for a version we tried to republish                          | Prior run partially succeeded                                | Delete the stale tag on GitHub or move on — npm publish is idempotent per-version                                                                    |
+| `pnpm version` runs Node's version dump instead of the script                   | Never invoke `pnpm version` directly; use `pnpm run version` | Already baked into the release workflow                                                                                                              |

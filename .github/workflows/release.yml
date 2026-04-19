@@ -1,35 +1,23 @@
 name: Release
 
-# Fully automated release flow via Changesets.
+# Step 2 of the release flow: publish on push to `main`.
 #
-# - Every PR to develop includes a changeset (see CONTRIBUTING.md).
-# - On push to develop, this workflow runs:
-#     * If there are pending changeset .md files, it opens (or updates) a
-#       PR titled "chore: release packages" with the version bumps + CHANGELOG
-#       applied.
-#     * If the release PR was just merged, it runs `pnpm release` which
-#       publishes to npm, creates git tags, and then we create a GitHub
-#       Release with auto-generated notes.
+# Triggered when the release PR (opened by `release-prepare.yml`) merges
+# into `main`. This workflow:
 #
-# Why a GitHub App token instead of GITHUB_TOKEN:
-#   The runner's default GITHUB_TOKEN is blocked at the enterprise level
-#   from creating or approving pull requests (error:
-#   "GitHub Actions is not permitted to create or approve pull requests").
-#   The WHISQ_BOT GitHub App (already used by notify-docs-on-release) has
-#   explicit pull_requests:write + contents:write on this repo, which is
-#   what changesets/action needs.
+#   1. Re-runs build + test as a safety net.
+#   2. Invokes `pnpm run release` via changesets/action — publishes all
+#      bumped packages to npm with provenance, creates per-package git tags,
+#      and creates a GitHub Release for each tag.
+#   3. Opens a back-merge PR from `main` into `develop` so `develop` picks
+#      up the version bumps and CHANGELOG entries.
 #
-# One-time setup (documented in docs/RELEASING.md):
-#   The WHISQ_BOT app must be granted these permissions on whisqjs/whisq:
-#     - Contents: Read & Write
-#     - Pull requests: Read & Write
-#     - Metadata: Read
-#
-# Manual override: workflow_dispatch is available for recovery.
+# If there are no unpublished packages (e.g. workflow fires from an
+# unrelated push), changesets/action detects that and skips publishing.
 
 on:
   push:
-    branches: [develop]
+    branches: [main]
   workflow_dispatch:
 
 concurrency:
@@ -42,8 +30,11 @@ permissions:
   id-token: write
 
 jobs:
-  release:
+  publish:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+      published: ${{ steps.changesets.outputs.published }}
     steps:
       - name: Mint WHISQ_BOT app token
         id: app-token
@@ -69,7 +60,6 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # Safety-net quality gates
       - name: Build
         run: pnpm build
 
@@ -82,24 +72,56 @@ jobs:
       - name: Check bundle size
         run: cd packages/core && pnpm size
 
-      - name: Create release PR or publish
+      - name: Record current @whisq/core version
+        id: ver
+        run: echo "version=$(node -p "require('./packages/core/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Publish to npm + create tags + GitHub Releases
         id: changesets
         uses: changesets/action@v1
         with:
-          # Use `pnpm run <script>` because pnpm's built-in `pnpm version`
-          # command shadows our package.json script of the same name (same
-          # applies to `release`). Running through `pnpm run` dispatches to
-          # the script we actually want (`changeset version` + template sync
-          # for version; `pnpm build && pnpm test && changeset publish` for
-          # release).
-          version: pnpm run version
           publish: pnpm run release
-          title: "chore: release packages"
-          commit: "chore: release packages"
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-      # GitHub Releases for each published package are created automatically
-      # by changesets/action (its `createGithubReleases: true` default).
-      # No follow-up step needed.
+
+  backmerge:
+    needs: publish
+    if: needs.publish.outputs.published == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Mint WHISQ_BOT app token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.WHISQ_BOT_APP_ID }}
+          private-key: ${{ secrets.WHISQ_BOT_PRIVATE_KEY }}
+          owner: whisqjs
+          repositories: whisq
+
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: main
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Create back-merge branch and open PR
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          VERSION: ${{ needs.publish.outputs.version }}
+        run: |
+          git config user.name "whisq-bot[bot]"
+          git config user.email "whisq-bot[bot]@users.noreply.github.com"
+          BRANCH="chore/backmerge-main-to-develop-v$VERSION"
+          git checkout -b "$BRANCH"
+          git push -u origin "$BRANCH"
+          gh pr create \
+            --base develop \
+            --head "$BRANCH" \
+            --title "chore: back-merge main → develop after v$VERSION" \
+            --label "skip-changeset" \
+            --body "Automated back-merge following the v$VERSION release. Bringing version bumps and CHANGELOG updates from \`main\` into \`develop\` so future feature branches start from the released state."
