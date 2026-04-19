@@ -1,27 +1,31 @@
 name: Release
 
-# Full release automation via Changesets.
+# Fully automated release flow via Changesets.
 #
-# How it works:
+# - Every PR to develop includes a changeset (see CONTRIBUTING.md).
+# - On push to develop, this workflow runs:
+#     * If there are pending changeset .md files, it opens (or updates) a
+#       PR titled "chore: release packages" with the version bumps + CHANGELOG
+#       applied.
+#     * If the release PR was just merged, it runs `pnpm release` which
+#       publishes to npm, creates git tags, and then we create a GitHub
+#       Release with auto-generated notes.
 #
-# 1. Every PR to develop should include a changeset (a markdown file in
-#    `.changeset/`). PRs without one are blocked by the changeset-check job
-#    unless they carry the `skip-changeset` label (docs, repo tooling, etc.).
+# Why a GitHub App token instead of GITHUB_TOKEN:
+#   The runner's default GITHUB_TOKEN is blocked at the enterprise level
+#   from creating or approving pull requests (error:
+#   "GitHub Actions is not permitted to create or approve pull requests").
+#   The WHISQ_BOT GitHub App (already used by notify-docs-on-release) has
+#   explicit pull_requests:write + contents:write on this repo, which is
+#   what changesets/action needs.
 #
-# 2. On push to develop, this workflow runs changesets/action. If there are
-#    pending changeset files, it opens (or updates) a PR titled
-#    "chore: release packages" that applies all pending changesets — bumping
-#    versions, updating CHANGELOGs, and removing the consumed changeset files.
+# One-time setup (documented in docs/RELEASING.md):
+#   The WHISQ_BOT app must be granted these permissions on whisqjs/whisq:
+#     - Contents: Read & Write
+#     - Pull requests: Read & Write
+#     - Metadata: Read
 #
-# 3. Merging that release PR triggers this workflow again. This time there are
-#    no pending changesets, so the action runs `pnpm release` which publishes
-#    to npm and creates git tags for the newly-published versions.
-#
-# 4. A follow-up step turns the top-level tag (v<core-version>) into a
-#    GitHub Release with auto-generated notes.
-#
-# Manual override: `workflow_dispatch` lets you force a run, e.g. to recover
-# from a failed publish or publish a hotfix outside the normal flow.
+# Manual override: workflow_dispatch is available for recovery.
 
 on:
   push:
@@ -41,11 +45,7 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      # Mint a GitHub App installation token. The runner's GITHUB_TOKEN is
-      # blocked at the enterprise level from creating pull requests; the bot
-      # app token has explicit pull_requests:write + contents:write for this
-      # repo, which is what changesets/action needs to open the release PR.
-      - name: Mint app token
+      - name: Mint WHISQ_BOT app token
         id: app-token
         uses: actions/create-github-app-token@v1
         with:
@@ -69,8 +69,7 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # Safety-net quality gates — the same gates run on every PR, but we
-      # re-run them here so a broken main-branch state can never reach npm.
+      # Safety-net quality gates
       - name: Build
         run: pnpm build
 
@@ -102,6 +101,7 @@ jobs:
         env:
           PUBLISHED_PACKAGES: ${{ steps.changesets.outputs.publishedPackages }}
         with:
+          github-token: ${{ steps.app-token.outputs.token }}
           script: |
             const published = JSON.parse(process.env.PUBLISHED_PACKAGES || "[]");
             const core = published.find((p) => p.name === "@whisq/core");
