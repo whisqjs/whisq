@@ -17,7 +17,7 @@
     "README.md"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node scripts/generate-public-api.mjs",
     "dev": "tsc --watch",
     "test": "vitest run --passWithNoTests",
     "size": "size-limit",
