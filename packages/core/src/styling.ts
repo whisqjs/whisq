@@ -245,6 +245,46 @@ export function rcx(
   };
 }
 
+// ── sx() — Style object composition ────────────────────────────────────────
+
+type SxStyleValue = string | number | null | undefined;
+type SxStyleSource =
+  | Record<string, SxStyleValue | (() => SxStyleValue)>
+  | false
+  | null
+  | undefined;
+
+/**
+ * Merge style objects into a single object suitable for the element `style`
+ * prop. Later sources override earlier ones. Falsy sources (false / null /
+ * undefined) are skipped — useful for conditionals.
+ *
+ * ```ts
+ * div({
+ *   style: sx(
+ *     { color: "red", padding: "1rem" },           // base
+ *     active.value && { borderColor: "blue" },     // conditional
+ *     { transform: () => `translateX(${x.value}px)` }, // reactive
+ *   ),
+ * })
+ * ```
+ *
+ * Function values are preserved (not eagerly invoked), so the reactive
+ * per-property subscription in the `style` prop still sees them.
+ */
+export function sx(
+  ...sources: SxStyleSource[]
+): Record<string, SxStyleValue | (() => SxStyleValue)> {
+  const merged: Record<string, SxStyleValue | (() => SxStyleValue)> = {};
+  for (const source of sources) {
+    if (!source) continue;
+    for (const [key, value] of Object.entries(source)) {
+      merged[key] = value;
+    }
+  }
+  return merged;
+}
+
 // ── theme() — Design Tokens ────────────────────────────────────────────────
 
 type ThemeTokens = Record<

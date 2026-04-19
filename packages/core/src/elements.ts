@@ -32,11 +32,14 @@ type EventHandler<E extends Event = Event> = (event: E) => void;
 
 type ReactiveProp<T> = T | (() => T);
 
+type StyleValue = string | number | null | undefined;
+export type StyleObject = Record<string, StyleValue | (() => StyleValue)>;
+
 interface BaseProps {
   ref?: Ref;
   class?: ReactiveProp<string | undefined>;
   id?: ReactiveProp<string | undefined>;
-  style?: ReactiveProp<string | undefined>;
+  style?: ReactiveProp<string | undefined> | StyleObject;
   hidden?: ReactiveProp<boolean>;
   title?: ReactiveProp<string | undefined>;
   [key: `data-${string}`]: ReactiveProp<string | undefined>;
@@ -156,6 +159,11 @@ export function h(
             (value as (el: HTMLElement | null) => void)(null);
           });
         }
+        continue;
+      }
+      if (key === "style" && isPlainStyleObject(value)) {
+        // Style object — per-property reactive subscriptions
+        applyStyleObject(el as HTMLElement, value, disposers);
         continue;
       }
       if (key.startsWith("on") && typeof value === "function") {
@@ -818,6 +826,42 @@ export function mount(node: WhisqNode, container: Element): () => void {
 }
 
 // ── Internal ────────────────────────────────────────────────────────────────
+
+function isPlainStyleObject(value: unknown): value is StyleObject {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+}
+
+function camelToKebab(str: string): string {
+  return str.replace(/[A-Z]/g, (m) => `-${m.toLowerCase()}`);
+}
+
+function applyStyleObject(
+  el: HTMLElement,
+  style: StyleObject,
+  disposers: (() => void)[],
+): void {
+  for (const [prop, raw] of Object.entries(style)) {
+    const cssProp = prop.startsWith("--") ? prop : camelToKebab(prop);
+    if (typeof raw === "function") {
+      const getter = raw as () => StyleValue;
+      const dispose = effect(() => {
+        const v = getter();
+        if (v == null || v === "") {
+          el.style.removeProperty(cssProp);
+        } else {
+          el.style.setProperty(cssProp, String(v));
+        }
+      });
+      disposers.push(dispose);
+    } else if (raw != null && raw !== "") {
+      el.style.setProperty(cssProp, String(raw));
+    }
+  }
+}
 
 function applyProp(el: Element, key: string, value: unknown): void {
   if (key === "class") {
