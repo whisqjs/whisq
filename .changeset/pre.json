@@ -12,5 +12,7 @@
     "@whisq/testing": "0.1.0-alpha.4",
     "@whisq/vite-plugin": "0.1.0-alpha.4"
   },
-  "changesets": []
+  "changesets": [
+    "alpha-5-batch"
+  ]
 }
