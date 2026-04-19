@@ -21,8 +21,8 @@
     "README.md"
   ],
   "scripts": {
-    "build": "tsc && node scripts/generate-public-api.mjs",
-    "dev": "tsc --watch",
+    "build": "tsc -p tsconfig.build.json && node scripts/generate-public-api.mjs",
+    "dev": "tsc --watch -p tsconfig.build.json",
     "test": "vitest run --passWithNoTests",
     "size": "size-limit",
     "bench": "tsx bench/signal-throughput.ts",
