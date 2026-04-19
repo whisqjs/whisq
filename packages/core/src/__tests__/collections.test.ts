@@ -1,5 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { effect } from "../reactive.js";
+// Imported from the internal module path. Public API is
+// `@whisq/core/collections` (see packages/core/package.json exports).
 import { signalMap, signalSet } from "../collections.js";
 
 describe("signalMap()", () => {
