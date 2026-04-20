@@ -70,6 +70,19 @@ div({ style: () => `color: ${color.value}` }, "Styled text")
 div({ hidden: () => !visible.value }, "Now you see me")
 ```
 
+#### Reactive shapes — pick the right one
+
+Four shapes cover every reactive position. The one-line decision flow: *"single signal you own → `bind()`; field inside an item inside a signal-held array → manual event pair."*
+
+| Shape            | Example                                                            | Use when                                             |
+| ---------------- | ------------------------------------------------------------------ | ---------------------------------------------------- |
+| Getter child     | `span(() => count.value)`                                          | A signal drives inline text                          |
+| Getter prop      | `{ class: () => active.value ? "on" : "off" }`                      | A signal drives an element attribute / class / style |
+| `bind()` spread  | `input({ ...bind(email) })`                                        | Two-way binding one signal into one form input       |
+| Manual event pair | `{ checked: () => todo().done, onchange: () => toggle(todo().id) }` | Field inside an item inside a keyed `each`          |
+
+Inside a keyed `each(..., { key })`, the callback’s `item` is an **accessor function** — call it (`todo()`) to read the current item. Getters that close over `todo` directly go stale when the array is replaced.
+
 ### Events
 
 ```ts
