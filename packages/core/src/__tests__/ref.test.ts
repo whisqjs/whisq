@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { signal, isSignal } from "../reactive.js";
 import { div, input, button, mount } from "../elements.js";
 import { ref } from "../ref.js";
+import type { ElementRef } from "../ref.js";
 
 let container: HTMLElement;
 let dispose: () => void;
@@ -133,5 +134,61 @@ describe("ref() helper", () => {
     const r = ref();
     dispose = mount(div({ ref: r }), container);
     expect(r.value).toBeInstanceOf(HTMLDivElement);
+  });
+
+  // ── Accessor contract (WHISQ-63) ──────────────────────────────────────
+
+  it("uses .value as the accessor — not .current", () => {
+    const r = ref<HTMLInputElement>();
+    // `.current` is React's convention, not Whisq's. Verify the property
+    // doesn't exist so it's loud if anyone ever adds it.
+    expect("current" in r).toBe(false);
+    // The documented accessors all exist on a regular Signal.
+    expect(typeof r.value === "object" || r.value === null).toBe(true);
+    expect(typeof r.peek).toBe("function");
+    expect(typeof r.subscribe).toBe("function");
+  });
+
+  it("returns a signal, so isSignal(ref()) === true", () => {
+    const r = ref<HTMLInputElement>();
+    expect(isSignal(r)).toBe(true);
+  });
+
+  it("subscribe() fires on mount and unmount", () => {
+    const r = ref<HTMLInputElement>();
+    const seen: (HTMLInputElement | null)[] = [];
+    const unsubscribe = r.subscribe((v) => seen.push(v));
+
+    dispose = mount(input({ ref: r }), container);
+    dispose();
+    unsubscribe();
+
+    // Initial immediate null + populate on mount + reset to null on unmount.
+    expect(seen.length).toBeGreaterThanOrEqual(3);
+    expect(seen[0]).toBeNull();
+    expect(seen.find((v) => v instanceof HTMLInputElement)).toBeInstanceOf(
+      HTMLInputElement,
+    );
+    expect(seen[seen.length - 1]).toBeNull();
+  });
+});
+
+// ── ElementRef<T> type alias (WHISQ-63) ────────────────────────────────
+
+describe("ElementRef<T>", () => {
+  it("is assignable to the Ref prop type (signal form)", () => {
+    // Compile-time assertion: declaring via the alias produces a value
+    // that satisfies the element `ref` prop.
+    const r: ElementRef<HTMLInputElement> = ref<HTMLInputElement>();
+    dispose = mount(input({ ref: r }), container);
+    expect(r.value).toBeInstanceOf(HTMLInputElement);
+  });
+
+  it("is structurally identical to Signal<T | null>", () => {
+    const r: ElementRef<HTMLInputElement> = signal<HTMLInputElement | null>(
+      null,
+    );
+    dispose = mount(input({ ref: r }), container);
+    expect(r.value).toBeInstanceOf(HTMLInputElement);
   });
 });
