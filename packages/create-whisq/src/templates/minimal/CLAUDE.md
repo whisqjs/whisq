@@ -101,20 +101,39 @@ div(
 
 ### List Rendering — each()
 
+`each()` has two shapes depending on whether you pass a `key` option:
+
 ```ts
+// 1. Non-keyed — items re-render on every source change, simple snapshot.
 ul(
-  each(() => todos.value, (todo) =>
-    li({ class: () => todo.done ? "done" : "" },
-      span(todo.text),
-      button({ onclick: () => remove(todo.id) }, "✕"),
-    )
+  each(() => items.value, (item) =>
+    li(item.name),
   ),
 )
 
-// Or inline with .map() (also works)
+// 2. Keyed — DOM nodes are reused for matching keys. The render callback
+//    receives ACCESSORS, not snapshots, so field reads inside reactive
+//    getters see fresh values when the source array is replaced:
 ul(
-  () => items.value.map(item => li(item.name))
+  each(
+    () => todos.value,
+    (todo) =>
+      li(
+        { class: () => todo().done ? "done" : "" },  // getter reads accessor
+        span(() => todo().text),                      // getter reads accessor
+        button({ onclick: () => remove(todo().id) }, "✕"),
+      ),
+    { key: (t) => t.id },
+  ),
 )
+```
+
+When you pass `{ key }`, the callback’s `item` / `index` are **accessor functions** — call them (`todo()`, `index()`) to read the current value. Wrap them in `() =>` for reactive children/props so they re-read when the source array changes.
+
+Inline `.map()` also works for simple cases:
+
+```ts
+ul(() => items.value.map(item => li(item.name)))
 ```
 
 ### Components
