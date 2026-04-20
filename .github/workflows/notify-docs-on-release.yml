@@ -41,6 +41,12 @@ permissions:
 jobs:
   dispatch:
     name: Dispatch to docs
+    # Changesets publishes each @whisq/* package as its own GitHub release, so
+    # a single release cycle fires `release: published` ~9 times. We dispatch
+    # only on the @whisq/core release (the canonical "framework shipped" event)
+    # and on manual workflow_dispatch runs, so docs tracking issues don't
+    # multiply per package. See whisqjs/whisq#75.
+    if: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.event.release.tag_name, '@whisq/core@') }}
     runs-on: ubuntu-latest
     steps:
       - name: Mint WHISQ_BOT app token
