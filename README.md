@@ -106,6 +106,16 @@ Whisq is designed for AI-assisted development:
 - **Small API surface** — the entire framework fits in <5% of a 200K context window
 - **No footguns** — uniform `() => value` pattern, no hooks rules, no reactivity caveats
 
+### Entry points for AI assistants
+
+Point Claude, ChatGPT, Gemini, Cursor, or any coding assistant at these URLs before it writes Whisq code:
+
+- **Compact LLM reference card:** <https://whisq.dev/ai/llm-reference/> — the whole framework in one page
+- **Machine-readable exports manifest:** <https://unpkg.com/@whisq/core@latest/dist/public-api.json> — every named export in the current release, pinned per version
+- **Copy-paste test prompts:** [`docs/AI_TEST_PROMPTS.md`](./docs/AI_TEST_PROMPTS.md) — eight self-contained prompts (todo, signup form, chat UI, markdown editor, live dashboard, router SPA, SSR blog, Snake) that exercise different surfaces of the framework
+
+> **Coming soon:** `whisq.dev/llms.txt` (structured index, [llmstxt.org](https://llmstxt.org) convention) and `whisq.dev/llms-full.txt` (full docs as one plain-text fetch) are merged to docs `develop` and will go live once the docs repo cuts its next release.
+
 ## Documentation
 
 - [Getting Started](https://whisq.dev/getting-started/introduction/) — installation, quick start, first component
