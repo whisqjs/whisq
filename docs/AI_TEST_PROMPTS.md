@@ -38,6 +38,16 @@ Whisq rules (hard constraints):
   - Use resource(fetcher, { source, keepPrevious, initialValue }) for async data with cancellation.
   - Use signalMap / signalSet (imported from "@whisq/core/collections") for large keyed state.
 
+Whisq project structure (one-line rule: one component per file; main.ts is for mounting, nothing else):
+  - src/main.ts — ~4 lines, imports App and calls mount(App({}), document.getElementById("app")!). Nothing else.
+  - src/App.ts — top-level component. Owns routing, layout, error boundary. Business logic goes in stores/; reusable UI in components/; route targets in pages/.
+  - src/components/ — reusable UI, one per file. PascalCase filename matches the named export (Button.ts exports Button). Pull a sub-component into its own file when it is reused OR owns independent state OR exceeds ~50 lines.
+  - src/pages/ — route targets if using @whisq/router. One file per route.
+  - src/stores/ — shared state, one domain per file (cart.ts, auth.ts). Export signals + mutation helpers. No default exports. No import-time I/O.
+  - src/lib/ — pure utilities, NO Whisq imports. Testable in Node without jsdom.
+  - src/styles.ts — sheet() definitions at module scope.
+  - DON'T ship a single-file app that inlines every component in main.ts for non-trivial projects. Scaffolders and AI output diverge when that happens, and editing turns into whole-file rewrites.
+
 Whisq styling (use Whisq's built-in primitives — do NOT import styled-components, emotion, goober, or any other CSS-in-JS library; do NOT add Tailwind unless specifically asked):
   - sheet({ card: { padding: "1rem", color: "red", "&:hover": { color: "blue" }, "@media (max-width: 640px)": { padding: "0.5rem" } } })
     — scoped CSS classes with nested pseudo/media rules. Returns { card: "whisq-card-a1b2", ... } which you spread into class props. Use this as the DEFAULT for all non-reactive styling. No build step; a <style> tag is injected at runtime.
@@ -57,7 +67,7 @@ Whisq styling (use Whisq's built-in primitives — do NOT import styled-componen
   - Do NOT write raw <style> tags in markup. sheet() handles <style> injection.
   - All of sheet, cx, rcx, sx, theme are imported from "@whisq/core".
 
-Task: Build a todo app as a single-file Whisq component that mounts to #app.
+Task: Build a todo app that mounts to #app, following the project structure rules above.
 
 Features:
   - Text input to add new todos (Enter key or Add button submits).
@@ -100,6 +110,16 @@ Whisq rules (hard constraints):
   - Use match(...) for tri-state/multi-branch conditionals (loading/error/data), not chained when() calls.
   - Use resource(fetcher, { source, keepPrevious, initialValue }) for async data with cancellation.
   - Use signalMap / signalSet (imported from "@whisq/core/collections") for large keyed state.
+
+Whisq project structure (one-line rule: one component per file; main.ts is for mounting, nothing else):
+  - src/main.ts — ~4 lines, imports App and calls mount(App({}), document.getElementById("app")!). Nothing else.
+  - src/App.ts — top-level component. Owns routing, layout, error boundary. Business logic goes in stores/; reusable UI in components/; route targets in pages/.
+  - src/components/ — reusable UI, one per file. PascalCase filename matches the named export (Button.ts exports Button). Pull a sub-component into its own file when it is reused OR owns independent state OR exceeds ~50 lines.
+  - src/pages/ — route targets if using @whisq/router. One file per route.
+  - src/stores/ — shared state, one domain per file (cart.ts, auth.ts). Export signals + mutation helpers. No default exports. No import-time I/O.
+  - src/lib/ — pure utilities, NO Whisq imports. Testable in Node without jsdom.
+  - src/styles.ts — sheet() definitions at module scope.
+  - DON'T ship a single-file app that inlines every component in main.ts for non-trivial projects. Scaffolders and AI output diverge when that happens, and editing turns into whole-file rewrites.
 
 Whisq styling (use Whisq's built-in primitives — do NOT import styled-components, emotion, goober, or any other CSS-in-JS library; do NOT add Tailwind unless specifically asked):
   - sheet({ card: { padding: "1rem", color: "red", "&:hover": { color: "blue" }, "@media (max-width: 640px)": { padding: "0.5rem" } } })
@@ -164,6 +184,16 @@ Whisq rules (hard constraints):
   - Use resource(fetcher, { source, keepPrevious, initialValue }) for async data with cancellation.
   - Use signalMap / signalSet (imported from "@whisq/core/collections") for large keyed state.
 
+Whisq project structure (one-line rule: one component per file; main.ts is for mounting, nothing else):
+  - src/main.ts — ~4 lines, imports App and calls mount(App({}), document.getElementById("app")!). Nothing else.
+  - src/App.ts — top-level component. Owns routing, layout, error boundary. Business logic goes in stores/; reusable UI in components/; route targets in pages/.
+  - src/components/ — reusable UI, one per file. PascalCase filename matches the named export (Button.ts exports Button). Pull a sub-component into its own file when it is reused OR owns independent state OR exceeds ~50 lines.
+  - src/pages/ — route targets if using @whisq/router. One file per route.
+  - src/stores/ — shared state, one domain per file (cart.ts, auth.ts). Export signals + mutation helpers. No default exports. No import-time I/O.
+  - src/lib/ — pure utilities, NO Whisq imports. Testable in Node without jsdom.
+  - src/styles.ts — sheet() definitions at module scope.
+  - DON'T ship a single-file app that inlines every component in main.ts for non-trivial projects. Scaffolders and AI output diverge when that happens, and editing turns into whole-file rewrites.
+
 Whisq styling (use Whisq's built-in primitives — do NOT import styled-components, emotion, goober, or any other CSS-in-JS library; do NOT add Tailwind unless specifically asked):
   - sheet({ card: { padding: "1rem", color: "red", "&:hover": { color: "blue" }, "@media (max-width: 640px)": { padding: "0.5rem" } } })
     — scoped CSS classes with nested pseudo/media rules. Returns { card: "whisq-card-a1b2", ... } which you spread into class props. Use this as the DEFAULT for all non-reactive styling. No build step; a <style> tag is injected at runtime.
@@ -227,6 +257,16 @@ Whisq rules (hard constraints):
   - Use resource(fetcher, { source, keepPrevious, initialValue }) for async data with cancellation.
   - Use signalMap / signalSet (imported from "@whisq/core/collections") for large keyed state.
 
+Whisq project structure (one-line rule: one component per file; main.ts is for mounting, nothing else):
+  - src/main.ts — ~4 lines, imports App and calls mount(App({}), document.getElementById("app")!). Nothing else.
+  - src/App.ts — top-level component. Owns routing, layout, error boundary. Business logic goes in stores/; reusable UI in components/; route targets in pages/.
+  - src/components/ — reusable UI, one per file. PascalCase filename matches the named export (Button.ts exports Button). Pull a sub-component into its own file when it is reused OR owns independent state OR exceeds ~50 lines.
+  - src/pages/ — route targets if using @whisq/router. One file per route.
+  - src/stores/ — shared state, one domain per file (cart.ts, auth.ts). Export signals + mutation helpers. No default exports. No import-time I/O.
+  - src/lib/ — pure utilities, NO Whisq imports. Testable in Node without jsdom.
+  - src/styles.ts — sheet() definitions at module scope.
+  - DON'T ship a single-file app that inlines every component in main.ts for non-trivial projects. Scaffolders and AI output diverge when that happens, and editing turns into whole-file rewrites.
+
 Whisq styling (use Whisq's built-in primitives — do NOT import styled-components, emotion, goober, or any other CSS-in-JS library; do NOT add Tailwind unless specifically asked):
   - sheet({ card: { padding: "1rem", color: "red", "&:hover": { color: "blue" }, "@media (max-width: 640px)": { padding: "0.5rem" } } })
     — scoped CSS classes with nested pseudo/media rules. Returns { card: "whisq-card-a1b2", ... } which you spread into class props. Use this as the DEFAULT for all non-reactive styling. No build step; a <style> tag is injected at runtime.
@@ -287,6 +327,16 @@ Whisq rules (hard constraints):
   - Use resource(fetcher, { source, keepPrevious, initialValue }) for async data with cancellation.
   - Use signalMap / signalSet (imported from "@whisq/core/collections") for large keyed state.
 
+Whisq project structure (one-line rule: one component per file; main.ts is for mounting, nothing else):
+  - src/main.ts — ~4 lines, imports App and calls mount(App({}), document.getElementById("app")!). Nothing else.
+  - src/App.ts — top-level component. Owns routing, layout, error boundary. Business logic goes in stores/; reusable UI in components/; route targets in pages/.
+  - src/components/ — reusable UI, one per file. PascalCase filename matches the named export (Button.ts exports Button). Pull a sub-component into its own file when it is reused OR owns independent state OR exceeds ~50 lines.
+  - src/pages/ — route targets if using @whisq/router. One file per route.
+  - src/stores/ — shared state, one domain per file (cart.ts, auth.ts). Export signals + mutation helpers. No default exports. No import-time I/O.
+  - src/lib/ — pure utilities, NO Whisq imports. Testable in Node without jsdom.
+  - src/styles.ts — sheet() definitions at module scope.
+  - DON'T ship a single-file app that inlines every component in main.ts for non-trivial projects. Scaffolders and AI output diverge when that happens, and editing turns into whole-file rewrites.
+
 Whisq styling (use Whisq's built-in primitives — do NOT import styled-components, emotion, goober, or any other CSS-in-JS library; do NOT add Tailwind unless specifically asked):
   - sheet({ card: { padding: "1rem", color: "red", "&:hover": { color: "blue" }, "@media (max-width: 640px)": { padding: "0.5rem" } } })
     — scoped CSS classes with nested pseudo/media rules. Returns { card: "whisq-card-a1b2", ... } which you spread into class props. Use this as the DEFAULT for all non-reactive styling. No build step; a <style> tag is injected at runtime.
@@ -345,6 +395,16 @@ Whisq rules (hard constraints):
   - Use match(...) for tri-state/multi-branch conditionals (loading/error/data), not chained when() calls.
   - Use resource(fetcher, { source, keepPrevious, initialValue }) for async data with cancellation.
   - Use signalMap / signalSet (imported from "@whisq/core/collections") for large keyed state.
+
+Whisq project structure (one-line rule: one component per file; main.ts is for mounting, nothing else):
+  - src/main.ts — ~4 lines, imports App and calls mount(App({}), document.getElementById("app")!). Nothing else.
+  - src/App.ts — top-level component. Owns routing, layout, error boundary. Business logic goes in stores/; reusable UI in components/; route targets in pages/.
+  - src/components/ — reusable UI, one per file. PascalCase filename matches the named export (Button.ts exports Button). Pull a sub-component into its own file when it is reused OR owns independent state OR exceeds ~50 lines.
+  - src/pages/ — route targets if using @whisq/router. One file per route.
+  - src/stores/ — shared state, one domain per file (cart.ts, auth.ts). Export signals + mutation helpers. No default exports. No import-time I/O.
+  - src/lib/ — pure utilities, NO Whisq imports. Testable in Node without jsdom.
+  - src/styles.ts — sheet() definitions at module scope.
+  - DON'T ship a single-file app that inlines every component in main.ts for non-trivial projects. Scaffolders and AI output diverge when that happens, and editing turns into whole-file rewrites.
 
 Whisq styling (use Whisq's built-in primitives — do NOT import styled-components, emotion, goober, or any other CSS-in-JS library; do NOT add Tailwind unless specifically asked):
   - sheet({ card: { padding: "1rem", color: "red", "&:hover": { color: "blue" }, "@media (max-width: 640px)": { padding: "0.5rem" } } })
@@ -405,6 +465,16 @@ Whisq rules (hard constraints):
   - Use resource(fetcher, { source, keepPrevious, initialValue }) for async data with cancellation.
   - Use signalMap / signalSet (imported from "@whisq/core/collections") for large keyed state.
 
+Whisq project structure (one-line rule: one component per file; main.ts is for mounting, nothing else):
+  - src/main.ts — ~4 lines, imports App and calls mount(App({}), document.getElementById("app")!). Nothing else.
+  - src/App.ts — top-level component. Owns routing, layout, error boundary. Business logic goes in stores/; reusable UI in components/; route targets in pages/.
+  - src/components/ — reusable UI, one per file. PascalCase filename matches the named export (Button.ts exports Button). Pull a sub-component into its own file when it is reused OR owns independent state OR exceeds ~50 lines.
+  - src/pages/ — route targets if using @whisq/router. One file per route.
+  - src/stores/ — shared state, one domain per file (cart.ts, auth.ts). Export signals + mutation helpers. No default exports. No import-time I/O.
+  - src/lib/ — pure utilities, NO Whisq imports. Testable in Node without jsdom.
+  - src/styles.ts — sheet() definitions at module scope.
+  - DON'T ship a single-file app that inlines every component in main.ts for non-trivial projects. Scaffolders and AI output diverge when that happens, and editing turns into whole-file rewrites.
+
 Whisq styling (use Whisq's built-in primitives — do NOT import styled-components, emotion, goober, or any other CSS-in-JS library; do NOT add Tailwind unless specifically asked):
   - sheet({ card: { padding: "1rem", color: "red", "&:hover": { color: "blue" }, "@media (max-width: 640px)": { padding: "0.5rem" } } })
     — scoped CSS classes with nested pseudo/media rules. Returns { card: "whisq-card-a1b2", ... } which you spread into class props. Use this as the DEFAULT for all non-reactive styling. No build step; a <style> tag is injected at runtime.
@@ -458,6 +528,16 @@ Whisq rules (hard constraints):
   - Use match(...) for tri-state/multi-branch conditionals (loading/error/data), not chained when() calls.
   - Use resource(fetcher, { source, keepPrevious, initialValue }) for async data with cancellation.
   - Use signalMap / signalSet (imported from "@whisq/core/collections") for large keyed state.
+
+Whisq project structure (one-line rule: one component per file; main.ts is for mounting, nothing else):
+  - src/main.ts — ~4 lines, imports App and calls mount(App({}), document.getElementById("app")!). Nothing else.
+  - src/App.ts — top-level component. Owns routing, layout, error boundary. Business logic goes in stores/; reusable UI in components/; route targets in pages/.
+  - src/components/ — reusable UI, one per file. PascalCase filename matches the named export (Button.ts exports Button). Pull a sub-component into its own file when it is reused OR owns independent state OR exceeds ~50 lines.
+  - src/pages/ — route targets if using @whisq/router. One file per route.
+  - src/stores/ — shared state, one domain per file (cart.ts, auth.ts). Export signals + mutation helpers. No default exports. No import-time I/O.
+  - src/lib/ — pure utilities, NO Whisq imports. Testable in Node without jsdom.
+  - src/styles.ts — sheet() definitions at module scope.
+  - DON'T ship a single-file app that inlines every component in main.ts for non-trivial projects. Scaffolders and AI output diverge when that happens, and editing turns into whole-file rewrites.
 
 Whisq styling (use Whisq's built-in primitives — do NOT import styled-components, emotion, goober, or any other CSS-in-JS library; do NOT add Tailwind unless specifically asked):
   - sheet({ card: { padding: "1rem", color: "red", "&:hover": { color: "blue" }, "@media (max-width: 640px)": { padding: "0.5rem" } } })
