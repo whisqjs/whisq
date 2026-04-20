@@ -272,13 +272,34 @@ import { items, total, addItem } from "./stores/cart";
 
 ## Project Structure
 
+**One-line rule:** one component per file. `main.ts` is for mounting, nothing else.
+
 ```
 src/
-  components/     # Component files
-  stores/         # Shared state (exported signals)
-  pages/          # Route pages (if using @whisq/router)
-  main.ts         # Entry: mount(App({}), document.getElementById("app"))
+  main.ts         # entrypoint — mounts App to #app, nothing else
+  App.ts          # top-level component — routing, layout, error boundaries
+  styles.ts       # sheet() definitions at module scope
+  components/     # reusable UI — one per file, PascalCase, named exports
+    Button.ts
+    Card.ts
+  pages/          # route targets (if using @whisq/router)
+    Home.ts
+    About.ts
+  stores/         # shared state — one domain per file
+    cart.ts
+    auth.ts
+  lib/            # pure utilities, NO Whisq imports (testable in isolation)
 ```
+
+- **`main.ts`** stays ~4 lines: import `App`, call `mount(App({}), ...)`. Nothing else belongs here.
+- **`App.ts`** owns routing, layout, error boundary, head setup. Business logic goes in `stores/`; route pages in `pages/`; reusable UI in `components/`.
+- **One component per file** in `components/`. PascalCase filename matches the named export (`Button.ts` exports `Button`). Pull a sub-component into its own file when it is reused OR owns independent state OR exceeds ~50 lines.
+- **Stores** export both the signals and the mutation helpers that operate on them. No default exports. No import-time I/O.
+- **`lib/`** is Whisq-free — if it needs a signal, it belongs in `stores/`.
+
+Anti-patterns to avoid: single-file apps, `src/lib/index.ts` utility soup, default exports, `stores/store.ts` holding everything, top-level network calls in a store, `main.ts` doing anything but `mount()`.
+
+Full convention with examples: [`packages/core/docs/project-structure.md`](https://github.com/whisqjs/whisq/blob/develop/packages/core/docs/project-structure.md) (in the framework repo).
 
 ## Git Workflow
 
