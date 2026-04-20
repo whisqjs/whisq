@@ -32,10 +32,41 @@ type Child =
  * An event handler generic over the event type and the element the handler
  * is attached to. The second parameter narrows `event.currentTarget` so
  * `e.currentTarget.value` on an input handler typechecks without casts.
+ *
+ * Useful for handlers defined outside the element call site, where
+ * inference can't kick in:
+ *
+ * ```ts
+ * const onSubmit: EventHandler<SubmitEvent, HTMLFormElement> = (e) => {
+ *   e.preventDefault();
+ *   e.currentTarget.reset();
+ * };
+ * form({ onsubmit: onSubmit });
+ * ```
  */
-type EventHandler<E extends Event = Event, T extends Element = Element> = (
-  event: E & { currentTarget: T },
-) => void;
+export type EventHandler<
+  E extends Event = Event,
+  T extends Element = Element,
+> = (event: E & { currentTarget: T }) => void;
+
+/**
+ * Lift a DOM event name (as used in `HTMLElementEventMap`) to its narrowed
+ * event type, with `currentTarget` set to the element the handler is on.
+ *
+ * Useful when you want to name the exact event — more readable than writing
+ * `KeyboardEvent & { currentTarget: HTMLInputElement }` by hand:
+ *
+ * ```ts
+ * function onSearchKey(e: WhisqEvent<"keydown", HTMLInputElement>) {
+ *   if (e.key === "Enter") submit();
+ * }
+ * input({ onkeydown: onSearchKey });
+ * ```
+ */
+export type WhisqEvent<
+  K extends keyof HTMLElementEventMap,
+  T extends Element = Element,
+> = HTMLElementEventMap[K] & { currentTarget: T };
 
 type ReactiveProp<T> = T | (() => T);
 
@@ -591,18 +622,38 @@ export function match(...args: Array<MatchBranch | MatchRender>): () => Child {
 export function each<T>(
   items: () => T[],
   render: (item: T, index: number) => WhisqNode,
+): () => Child[];
+export function each<T>(
+  items: () => T[],
+  render: (item: () => T, index: () => number) => WhisqNode,
+  options: { key: (item: T) => unknown },
+): WhisqNode;
+export function each<T>(
+  items: () => T[],
+  render:
+    | ((item: T, index: number) => WhisqNode)
+    | ((item: () => T, index: () => number) => WhisqNode),
   options?: { key: (item: T) => unknown },
 ): (() => Child[]) | WhisqNode {
   if (!options?.key) {
-    // Non-keyed: simple map (existing behavior)
-    return () => items().map((item, i) => render(item, i));
+    // Non-keyed: simple map — items are snapshots per render, no staleness
+    // issue because nodes are recreated on every source change.
+    const renderSnapshot = render as (item: T, index: number) => WhisqNode;
+    return () => items().map((item, i) => renderSnapshot(item, i));
   }
 
-  // Keyed: return a WhisqNode that manages its own reconciliation
+  // Keyed: return a WhisqNode that manages its own reconciliation.
+  // The render function receives accessors (() => T, () => number) so
+  // reactive getters over item fields see fresh values when the source
+  // array is replaced with new items at the same key (WHISQ-62).
   const keyFn = options.key;
+  const renderAccessor = render as (
+    item: () => T,
+    index: () => number,
+  ) => WhisqNode;
   const marker = document.createComment("whisq-each");
   const disposers: (() => void)[] = [];
-  let entries: KeyedEntry[] = [];
+  let entries: KeyedEntry<T>[] = [];
 
   // We need a parent — create a fragment to hold the marker initially.
   // The marker will be reparented when appended to the actual DOM.
@@ -614,7 +665,14 @@ export function each<T>(
     const parent = marker.parentNode;
     if (!parent) return;
 
-    entries = reconcileKeyed(parent, marker, entries, newItems, keyFn, render);
+    entries = reconcileKeyed(
+      parent,
+      marker,
+      entries,
+      newItems,
+      keyFn,
+      renderAccessor,
+    );
   });
   disposers.push(dispose);
 

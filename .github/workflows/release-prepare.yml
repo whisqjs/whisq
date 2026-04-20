@@ -33,7 +33,7 @@ jobs:
     steps:
       - name: Mint WHISQ_BOT app token
         id: app-token
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ secrets.WHISQ_BOT_APP_ID }}
           private-key: ${{ secrets.WHISQ_BOT_PRIVATE_KEY }}

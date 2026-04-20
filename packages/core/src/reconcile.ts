@@ -2,40 +2,62 @@
 // Whisq Core — Keyed List Reconciliation
 // LIS-based diffing algorithm for efficient DOM updates.
 // Only inserts, removes, or moves nodes that actually changed.
+//
+// The render callback is given *accessor* functions — `() => item` and
+// `() => index` — rather than plain values. When the source array is
+// replaced and a same-keyed entry is reused, the reconciler writes the new
+// item/index into the per-entry signals so any reactive getter closing over
+// `item()` / `index()` sees the fresh values. See WHISQ-62.
 // ============================================================================
 
+import { signal, type Signal } from "./reactive.js";
 import type { WhisqNode } from "./elements.js";
 
-export interface KeyedEntry {
+export interface KeyedEntry<T = unknown> {
   key: unknown;
   node: WhisqNode;
+  /** Updated on reuse so `() => itemSig.value` getters re-run with fresh data. */
+  itemSig: Signal<T>;
+  /** Updated on reorder so `() => indexSig.value` getters see the new position. */
+  indexSig: Signal<number>;
 }
 
 /**
  * Reconcile a keyed list. Diffs old keys vs new keys, reuses DOM nodes
  * for matching keys, and only performs the minimal set of DOM operations.
  *
+ * The render function receives accessors:
+ *   - `itemAccessor()` returns the current item for this key (up-to-date on
+ *     array replacement even when the DOM node is reused).
+ *   - `indexAccessor()` returns the current index (updates when the entry
+ *     moves within the list).
+ *
  * Returns the new entries array (with reused or freshly created nodes).
  */
 export function reconcileKeyed<T>(
   parent: Node,
   marker: Node,
-  oldEntries: KeyedEntry[],
+  oldEntries: KeyedEntry<T>[],
   newItems: T[],
   keyFn: (item: T) => unknown,
-  renderFn: (item: T, index: number) => WhisqNode,
-): KeyedEntry[] {
+  renderFn: (item: () => T, index: () => number) => WhisqNode,
+): KeyedEntry<T>[] {
   const newLen = newItems.length;
   const oldLen = oldEntries.length;
 
   // Fast path: empty → populated
   if (oldLen === 0) {
-    const entries: KeyedEntry[] = new Array(newLen);
+    const entries: KeyedEntry<T>[] = new Array(newLen);
     const fragment = document.createDocumentFragment();
     for (let i = 0; i < newLen; i++) {
-      const node = renderFn(newItems[i], i);
+      const itemSig = signal(newItems[i]);
+      const indexSig = signal(i);
+      const node = renderFn(
+        () => itemSig.value,
+        () => indexSig.value,
+      );
       fragment.appendChild(node.el);
-      entries[i] = { key: keyFn(newItems[i]), node };
+      entries[i] = { key: keyFn(newItems[i]), node, itemSig, indexSig };
     }
     parent.insertBefore(fragment, marker);
     return entries;
@@ -99,14 +121,24 @@ export function reconcileKeyed<T>(
     }
   }
 
-  // Build the new entries array, reusing old nodes where possible
-  const newEntries: KeyedEntry[] = new Array(newLen);
+  // Build the new entries array, reusing old nodes where possible.
+  // On reuse, update the entry's item/index signals so reactive getters
+  // closing over them see the fresh values (WHISQ-62).
+  const newEntries: KeyedEntry<T>[] = new Array(newLen);
   for (let i = 0; i < newLen; i++) {
     if (sources[i] !== -1) {
-      newEntries[i] = oldEntries[sources[i]];
+      const reused = oldEntries[sources[i]];
+      reused.itemSig.value = newItems[i];
+      reused.indexSig.value = i;
+      newEntries[i] = reused;
     } else {
-      const node = renderFn(newItems[i], i);
-      newEntries[i] = { key: newKeys[i], node };
+      const itemSig = signal(newItems[i]);
+      const indexSig = signal(i);
+      const node = renderFn(
+        () => itemSig.value,
+        () => indexSig.value,
+      );
+      newEntries[i] = { key: newKeys[i], node, itemSig, indexSig };
     }
   }
 

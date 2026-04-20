@@ -15,6 +15,7 @@ import {
   img,
   div,
 } from "../elements.js";
+import type { EventHandler, WhisqEvent } from "../elements.js";
 
 describe("event handler type inference", () => {
   it("input oninput narrows currentTarget to HTMLInputElement", () => {
@@ -125,5 +126,73 @@ describe("event handler type inference", () => {
         expectTypeOf(e).toMatchTypeOf<KeyboardEvent>();
       },
     });
+  });
+});
+
+describe("WhisqEvent<K, T> — named event-type alias", () => {
+  it("resolves to the correct HTMLElementEventMap entry with narrowed currentTarget", () => {
+    type Click = WhisqEvent<"click", HTMLButtonElement>;
+    expectTypeOf<Click>().toMatchTypeOf<MouseEvent>();
+    // Exercise the narrow via a member access — button-specific property
+    // proves currentTarget resolved correctly without the deep-equals blow-up.
+    expectTypeOf<Click["currentTarget"]["disabled"]>().toEqualTypeOf<boolean>();
+
+    type Keydown = WhisqEvent<"keydown", HTMLInputElement>;
+    expectTypeOf<Keydown>().toMatchTypeOf<KeyboardEvent>();
+    expectTypeOf<Keydown["key"]>().toEqualTypeOf<string>();
+    expectTypeOf<Keydown["currentTarget"]["value"]>().toEqualTypeOf<string>();
+
+    type Input = WhisqEvent<"input", HTMLTextAreaElement>;
+    expectTypeOf<Input>().toMatchTypeOf<Event>();
+    expectTypeOf<Input["currentTarget"]["rows"]>().toEqualTypeOf<number>();
+  });
+
+  it("lets a named extracted handler slot into an element prop", () => {
+    function onSearchKey(e: WhisqEvent<"keydown", HTMLInputElement>) {
+      expectTypeOf(e.key).toEqualTypeOf<string>();
+      expectTypeOf(e.currentTarget.value).toEqualTypeOf<string>();
+    }
+    input({ onkeydown: onSearchKey });
+  });
+
+  it("defaults T to Element when omitted", () => {
+    type GenericClick = WhisqEvent<"click">;
+    expectTypeOf<GenericClick>().toMatchTypeOf<MouseEvent>();
+    // Element is a broad type; check a member it actually has.
+    expectTypeOf<
+      GenericClick["currentTarget"]["tagName"]
+    >().toEqualTypeOf<string>();
+  });
+});
+
+describe("EventHandler<E, T> — named handler-type alias", () => {
+  it("accepts event + element type params and narrows currentTarget", () => {
+    const onSubmit: EventHandler<SubmitEvent, HTMLFormElement> = (e) => {
+      expectTypeOf(e).toMatchTypeOf<SubmitEvent>();
+      expectTypeOf(e.currentTarget.reset).toBeFunction();
+    };
+    form({ onsubmit: onSubmit });
+  });
+
+  it("defaults E to Event and T to Element when both omitted", () => {
+    const onAnything: EventHandler = (e) => {
+      expectTypeOf(e).toMatchTypeOf<Event>();
+      expectTypeOf(e.currentTarget.tagName).toEqualTypeOf<string>();
+    };
+    // Force retention so the local isn't tree-shaken from analysis.
+    void onAnything;
+  });
+
+  it("composes with WhisqEvent — EventHandler can be typed via WhisqEvent", () => {
+    // The two aliases are complementary: EventHandler takes `E` directly,
+    // WhisqEvent<K, T> produces the `E & { currentTarget: T }` shape you'd
+    // otherwise spell out by hand.
+    const onDrag: EventHandler<WhisqEvent<"dragstart", HTMLDivElement>> = (
+      e,
+    ) => {
+      expectTypeOf(e).toMatchTypeOf<DragEvent>();
+      expectTypeOf(e.currentTarget.draggable).toEqualTypeOf<boolean>();
+    };
+    void onDrag;
   });
 });

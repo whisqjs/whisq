@@ -1,17 +1,38 @@
 name: Notify docs on release
 
+# Fires a repository_dispatch event at whisqjs/whisq.dev whenever a
+# release is published here. The receiver over there
+# (.github/workflows/on-framework-release.yml) opens a tracking issue
+# with the release notes and a docs checklist.
+#
+# Design: whisqjs/whisq.dev#21 and companion #33 here.
+#
+# Implementation notes:
+#
+# - Uses actions/github-script rather than peter-evans/repository-dispatch
+#   because this repo's Actions allowlist only permits GitHub-owned,
+#   verified-publisher, pnpm/action-setup@*, and changesets/action@*. A
+#   github-script one-liner does the same job without expanding the list.
+#
+# - The App token (minted via actions/create-github-app-token) is scoped
+#   to whisq.dev via `repositories: whisq.dev`. The WHISQ_BOT App must be
+#   installed there with Contents: write permission.
+
 on:
   release:
     types: [published]
+  # Manual override for end-to-end testing without cutting a release.
   workflow_dispatch:
     inputs:
       tag:
-        description: Tag
+        description: Release tag to simulate (e.g. v0.1.0-alpha.5)
         required: true
+        type: string
         default: test-dispatch
       body:
-        description: Body
+        description: Release notes markdown (optional)
         required: false
+        type: string
         default: ""
 
 permissions:
@@ -19,19 +40,20 @@ permissions:
 
 jobs:
   dispatch:
+    name: Dispatch to docs
     runs-on: ubuntu-latest
     steps:
-      - name: Mint app token
+      - name: Mint WHISQ_BOT app token
         id: app-token
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ secrets.WHISQ_BOT_APP_ID }}
           private-key: ${{ secrets.WHISQ_BOT_PRIVATE_KEY }}
           owner: whisqjs
           repositories: whisq.dev
 
-      - name: Build payload
-        id: payload
+      - name: Send repository_dispatch
+        uses: actions/github-script@v7
         env:
           RELEASE_TAG: ${{ github.event.release.tag_name }}
           RELEASE_NAME: ${{ github.event.release.name }}
@@ -39,28 +61,35 @@ jobs:
           RELEASE_URL: ${{ github.event.release.html_url }}
           INPUT_TAG: ${{ inputs.tag }}
           INPUT_BODY: ${{ inputs.body }}
-        run: |
-          set -euo pipefail
-          TAG="${RELEASE_TAG:-$INPUT_TAG}"
-          NAME="${RELEASE_NAME:-}"
-          BODY="${RELEASE_BODY:-${INPUT_BODY:-}}"
-          URL="${RELEASE_URL:-}"
-          PAYLOAD=$(jq -nc \
-            --arg tag "$TAG" \
-            --arg name "$NAME" \
-            --arg body "$BODY" \
-            --arg html_url "$URL" \
-            '{tag: $tag, name: $name, body: $body, html_url: $html_url}')
-          {
-            echo "payload<<EOF"
-            echo "$PAYLOAD"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
-
-      - name: Send repository_dispatch
-        uses: peter-evans/repository-dispatch@v3
         with:
-          token: ${{ steps.app-token.outputs.token }}
-          repository: whisqjs/whisq.dev
-          event-type: framework-release
-          client-payload: ${{ steps.payload.outputs.payload }}
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const tag = process.env.RELEASE_TAG || process.env.INPUT_TAG;
+            if (!tag) {
+              core.setFailed('No release tag and no input tag — nothing to dispatch.');
+              return;
+            }
+
+            const clientPayload = {
+              tag,
+              name: process.env.RELEASE_NAME || tag,
+              body: process.env.RELEASE_BODY || process.env.INPUT_BODY || '',
+              html_url: process.env.RELEASE_URL || '',
+            };
+
+            await github.rest.repos.createDispatchEvent({
+              owner: 'whisqjs',
+              repo: 'whisq.dev',
+              event_type: 'framework-release',
+              client_payload: clientPayload,
+            });
+
+            core.notice(`Dispatched framework-release for ${tag} to whisqjs/whisq.dev`);
+            core.summary
+              .addHeading('Dispatched to whisqjs/whisq.dev')
+              .addList([
+                `tag: \`${clientPayload.tag}\``,
+                `name: \`${clientPayload.name}\``,
+                `html_url: ${clientPayload.html_url || '(none)'}`,
+              ])
+              .write();

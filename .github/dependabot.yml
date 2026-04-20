@@ -52,9 +52,9 @@ updates:
       prefix: chore
       include: scope
     ignore:
-      # pnpm/action-setup@v6 installs a newer pnpm whose lockfile parser
-      # rejects lockfiles written by pnpm@9.x (ERR_PNPM_BROKEN_LOCKFILE).
-      # Revisit after we regenerate the lockfile on pnpm@10 or @11.
-      - dependency-name: "pnpm/action-setup"
+      # Don't churn on major bumps — open those manually with a migration plan.
+      # Matches the ignore in the npm section above so every ecosystem has the
+      # same rule (avoids surprises like actions/create-github-app-token@v1→v3).
+      - dependency-name: "*"
         update-types:
           - version-update:semver-major
