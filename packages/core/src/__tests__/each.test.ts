@@ -90,7 +90,7 @@ describe("each() with key", () => {
     const node = ul(
       each(
         () => items.value,
-        (item) => li(item.text),
+        (item) => li(item().text),
         { key: (item) => item.id },
       ),
     );
@@ -104,7 +104,7 @@ describe("each() with key", () => {
     const node = ul(
       each(
         () => items.value,
-        (item) => li(item.text),
+        (item) => li(item().text),
         { key: (item) => item.id },
       ),
     );
@@ -121,7 +121,7 @@ describe("each() with key", () => {
     const node = ul(
       each(
         () => items.value,
-        (item) => li(item.text),
+        (item) => li(item().text),
         { key: (item) => item.id },
       ),
     );
@@ -141,7 +141,7 @@ describe("each() with key", () => {
     const node = ul(
       each(
         () => items.value,
-        (item) => li(item.text),
+        (item) => li(item().text),
         { key: (item) => item.id },
       ),
     );
@@ -162,7 +162,7 @@ describe("each() with key", () => {
     const node = ul(
       each(
         () => items.value,
-        (item) => li(item.text),
+        (item) => li(item().text),
         { key: (item) => item.id },
       ),
     );
@@ -179,7 +179,7 @@ describe("each() with key", () => {
     const node = ul(
       each(
         () => items.value,
-        (item) => li(item.text),
+        (item) => li(item().text),
         { key: (item) => item.id },
       ),
     );
@@ -196,7 +196,7 @@ describe("each() with key", () => {
     const node = ul(
       each(
         () => items.value,
-        (item) => li(item.text),
+        (item) => li(item().text),
         { key: (item) => item.id },
       ),
     );
@@ -213,7 +213,7 @@ describe("each() with key", () => {
     const node = ul(
       each(
         () => items.value,
-        (item) => li(item.text),
+        (item) => li(item().text),
         { key: (item) => item.id },
       ),
     );
@@ -231,7 +231,7 @@ describe("each() with key", () => {
     const node = ul(
       each(
         () => items.value,
-        (item) => li(item.text),
+        (item) => li(item().text),
         { key: (item) => item.id },
       ),
     );
@@ -253,7 +253,7 @@ describe("each() with key", () => {
     const node = ul(
       each(
         () => items.value,
-        (item) => li(item.text),
+        (item) => li(item().text),
         { key: (item) => item.id },
       ),
     );
@@ -273,7 +273,7 @@ describe("each() with key", () => {
     const node = ul(
       each(
         () => items.value,
-        (item) => li(item.text),
+        (item) => li(item().text),
         { key: (item) => item.id },
       ),
     );
@@ -292,7 +292,7 @@ describe("each() with key", () => {
     const node = ul(
       each(
         () => items.value,
-        (item) => li(item.text),
+        (item) => li(item().text),
         { key: (item) => item.id },
       ),
     );
@@ -309,7 +309,7 @@ describe("each() with key", () => {
     const node = ul(
       each(
         () => items.value,
-        (item) => li(item.text),
+        (item) => li(item().text),
         { key: (item) => item.id },
       ),
     );
@@ -332,7 +332,7 @@ describe("each() with key", () => {
     const node = ul(
       each(
         () => items.value,
-        (item) => li(item.text),
+        (item) => li(item().text),
         { key: (item) => item.id },
       ),
     );
@@ -359,7 +359,7 @@ describe("each() with key", () => {
       each(
         () => items.value,
         (item) => {
-          const n = li(item.text);
+          const n = li(item().text);
           const origDispose = n.dispose;
           n.dispose = () => {
             disposeCount++;
@@ -386,7 +386,7 @@ describe("each() with key", () => {
     const node = ul(
       each(
         () => items.value,
-        (item) => li(item.text),
+        (item) => li(item().text),
         { key: (item) => item.id },
       ),
     );
@@ -411,7 +411,7 @@ describe("each() with key", () => {
     const node = ul(
       each(
         () => items.value,
-        (item) => li(item.text),
+        (item) => li(item().text),
         { key: (item) => item.id },
       ),
     );
@@ -429,7 +429,7 @@ describe("each() with key", () => {
     const node = ul(
       each(
         () => items.value,
-        (item) => li(item.text),
+        (item) => li(item().text),
         { key: (item) => item.id },
       ),
     );
@@ -441,5 +441,171 @@ describe("each() with key", () => {
     flush();
 
     expect(textContent(container.firstElementChild!)).toEqual(["b"]);
+  });
+});
+
+// ── Accessor-style render callback (WHISQ-62) ─────────────────────────────
+
+describe("each() with key — accessor callback", () => {
+  it("field read via reactive getter re-runs when same-keyed item is replaced", () => {
+    type Todo = { id: number; text: string; done: boolean };
+    const todos = signal<Todo[]>([
+      { id: 1, text: "a", done: false },
+      { id: 2, text: "b", done: false },
+    ]);
+
+    const node = ul(
+      each(
+        () => todos.value,
+        (todo) =>
+          li(
+            {
+              class: () => (todo().done ? "done" : ""),
+            },
+            () => todo().text,
+          ),
+        { key: (t) => t.id },
+      ),
+    );
+    dispose = mount(node, container);
+
+    const liEls = () =>
+      Array.from(container.firstElementChild!.querySelectorAll("li"));
+
+    expect(liEls().map((el) => el.className)).toEqual(["", ""]);
+
+    todos.value = [
+      { id: 1, text: "a", done: true },
+      { id: 2, text: "b", done: false },
+    ];
+
+    expect(liEls().map((el) => el.className)).toEqual(["done", ""]);
+    expect(liEls().map((el) => el.textContent)).toEqual(["a", "b"]);
+  });
+
+  it("text read via reactive getter re-runs when same-keyed item's text changes", () => {
+    type Item = { id: number; text: string };
+    const items = signal<Item[]>([
+      { id: 1, text: "first" },
+      { id: 2, text: "second" },
+    ]);
+
+    const node = ul(
+      each(
+        () => items.value,
+        (item) => li(() => item().text),
+        { key: (i) => i.id },
+      ),
+    );
+    dispose = mount(node, container);
+    expect(textContent(container.firstElementChild!)).toEqual([
+      "first",
+      "second",
+    ]);
+
+    items.value = [
+      { id: 1, text: "renamed" },
+      { id: 2, text: "second" },
+    ];
+    expect(textContent(container.firstElementChild!)).toEqual([
+      "renamed",
+      "second",
+    ]);
+  });
+
+  it("a non-reactive snapshot (item().text without a getter wrapper) stays stale — as documented", () => {
+    type Item = { id: number; text: string };
+    const items = signal<Item[]>([{ id: 1, text: "original" }]);
+
+    const node = ul(
+      each(
+        () => items.value,
+        (item) => li(item().text), // snapshot — no getter wrapper
+        { key: (i) => i.id },
+      ),
+    );
+    dispose = mount(node, container);
+    expect(textContent(container.firstElementChild!)).toEqual(["original"]);
+
+    items.value = [{ id: 1, text: "changed" }];
+    expect(textContent(container.firstElementChild!)).toEqual(["original"]);
+  });
+
+  it("index accessor reflects the new position when an entry moves", () => {
+    type Item = { id: number };
+    const items = signal<Item[]>([{ id: 1 }, { id: 2 }, { id: 3 }]);
+
+    const node = ul(
+      each(
+        () => items.value,
+        (item, index) => li(() => `${item().id}@${index()}`),
+        { key: (i) => i.id },
+      ),
+    );
+    dispose = mount(node, container);
+    expect(textContent(container.firstElementChild!)).toEqual([
+      "1@0",
+      "2@1",
+      "3@2",
+    ]);
+
+    items.value = [{ id: 3 }, { id: 2 }, { id: 1 }];
+    expect(textContent(container.firstElementChild!)).toEqual([
+      "3@0",
+      "2@1",
+      "1@2",
+    ]);
+  });
+
+  it("event handlers read the latest item via the accessor", () => {
+    type Item = { id: number; text: string };
+    const items = signal<Item[]>([{ id: 1, text: "a" }]);
+    const clicked: number[] = [];
+
+    const node = ul(
+      each(
+        () => items.value,
+        (item) =>
+          li(
+            {
+              onclick: () => {
+                clicked.push(item().id);
+              },
+            },
+            () => item().text,
+          ),
+        { key: (i) => i.id },
+      ),
+    );
+    dispose = mount(node, container);
+
+    items.value = [{ id: 99, text: "a" }];
+
+    const liEl = container.firstElementChild!.querySelector(
+      "li",
+    ) as HTMLLIElement;
+    liEl.click();
+    expect(clicked).toEqual([99]);
+  });
+
+  it("DOM node identity is preserved when only the item reference changes", () => {
+    type Item = { id: number; text: string };
+    const items = signal<Item[]>([{ id: 1, text: "a" }]);
+
+    const node = ul(
+      each(
+        () => items.value,
+        (item) => li(() => item().text),
+        { key: (i) => i.id },
+      ),
+    );
+    dispose = mount(node, container);
+    const liBefore = container.firstElementChild!.querySelector("li");
+
+    items.value = [{ id: 1, text: "a-v2" }];
+    const liAfter = container.firstElementChild!.querySelector("li");
+
+    expect(liAfter).toBe(liBefore);
+    expect(liAfter!.textContent).toBe("a-v2");
   });
 });
