@@ -1,5 +1,14 @@
 # @whisq/devtools
 
+## 0.1.0-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [4f557c9]
+- Updated dependencies [6978011]
+- Updated dependencies [ea8d760]
+  - @whisq/core@0.1.0-alpha.6
+
 ## 0.1.0-alpha.5
 
 ### Minor Changes

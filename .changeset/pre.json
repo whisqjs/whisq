@@ -13,6 +13,11 @@
     "@whisq/vite-plugin": "0.1.0-alpha.4"
   },
   "changesets": [
-    "alpha-5-batch"
+    "alpha-5-batch",
+    "clarify-ref-accessor",
+    "each-keyed-accessor-callback",
+    "export-event-types",
+    "project-structure-conventions",
+    "reactive-shapes-taxonomy"
   ]
 }
