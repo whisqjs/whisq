@@ -32,10 +32,41 @@ type Child =
  * An event handler generic over the event type and the element the handler
  * is attached to. The second parameter narrows `event.currentTarget` so
  * `e.currentTarget.value` on an input handler typechecks without casts.
+ *
+ * Useful for handlers defined outside the element call site, where
+ * inference can't kick in:
+ *
+ * ```ts
+ * const onSubmit: EventHandler<SubmitEvent, HTMLFormElement> = (e) => {
+ *   e.preventDefault();
+ *   e.currentTarget.reset();
+ * };
+ * form({ onsubmit: onSubmit });
+ * ```
  */
-type EventHandler<E extends Event = Event, T extends Element = Element> = (
-  event: E & { currentTarget: T },
-) => void;
+export type EventHandler<
+  E extends Event = Event,
+  T extends Element = Element,
+> = (event: E & { currentTarget: T }) => void;
+
+/**
+ * Lift a DOM event name (as used in `HTMLElementEventMap`) to its narrowed
+ * event type, with `currentTarget` set to the element the handler is on.
+ *
+ * Useful when you want to name the exact event — more readable than writing
+ * `KeyboardEvent & { currentTarget: HTMLInputElement }` by hand:
+ *
+ * ```ts
+ * function onSearchKey(e: WhisqEvent<"keydown", HTMLInputElement>) {
+ *   if (e.key === "Enter") submit();
+ * }
+ * input({ onkeydown: onSearchKey });
+ * ```
+ */
+export type WhisqEvent<
+  K extends keyof HTMLElementEventMap,
+  T extends Element = Element,
+> = HTMLElementEventMap[K] & { currentTarget: T };
 
 type ReactiveProp<T> = T | (() => T);
 
