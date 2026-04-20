@@ -1,15 +1,10 @@
 name: Notify docs on release
 
-# TEMPORARY DIAGNOSTIC STEP — see whisqjs/whisq#33.
+# TEMPORARY DIAGNOSTIC — see whisqjs/whisq#33.
 #
-# Minimal version that only mints an App token scoped to whisq.dev and
-# echoes its length. This isolates whether the WHISQ_BOT App is actually
-# installed on whisqjs/whisq.dev — a successful run proves installation,
-# a startup_failure proves the App needs to be installed there before the
-# full dispatcher logic can work.
-#
-# Will be replaced with the full framework→docs repository_dispatch
-# flow once installation is confirmed.
+# Probe 2: app-token + repository-dispatch with a hardcoded payload.
+# Isolates whether peter-evans/repository-dispatch is the startup-failure
+# source vs. something in the env / jq step.
 
 on:
   workflow_dispatch:
@@ -21,7 +16,7 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: Mint WHISQ_BOT app token scoped to whisq.dev
+      - name: Mint WHISQ_BOT app token
         id: app-token
         uses: actions/create-github-app-token@v1
         with:
@@ -30,13 +25,10 @@ jobs:
           owner: whisqjs
           repositories: whisq.dev
 
-      - name: Report token presence
-        env:
-          TOKEN: ${{ steps.app-token.outputs.token }}
-        run: |
-          if [ -n "$TOKEN" ]; then
-            echo "OK: token minted (length=${#TOKEN})"
-          else
-            echo "::error::no token minted — App likely not installed on whisqjs/whisq.dev"
-            exit 1
-          fi
+      - name: Send hardcoded dispatch
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          repository: whisqjs/whisq.dev
+          event-type: framework-release
+          client-payload: '{"tag":"test-dispatch","name":"probe","body":"probe","html_url":""}'
