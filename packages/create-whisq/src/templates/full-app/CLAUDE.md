@@ -254,6 +254,20 @@ const LoginForm = component(() => {
 });
 ```
 
+#### Binding into nested records (opt-in, sub-path import)
+
+For forms on nested objects (`user.profile.email`, `settings.billing.plan`), use `bindPath` — same spread shape as `bind`/`bindField`, key-path instead of one key. Opt-in import so apps that don't need it pay no bundle cost.
+
+```ts
+import { bindPath } from "@whisq/core/forms";
+
+input({ ...bindPath(user, ["profile", "email"]) });
+input({ type: "number", ...bindPath(user, ["profile", "age"], { as: "number" }) });
+input({ type: "checkbox", ...bindPath(user, ["prefs", "dark"], { as: "checkbox" }) });
+```
+
+Writes produce a new root with structural sharing on siblings — `user.prefs` stays `===` across writes to `user.profile.email`. Object paths only; array traversal goes through `bindField` at the array level.
+
 ### Async Data — resource()
 
 ```ts

@@ -108,7 +108,19 @@ ul(
 - **`keyBy` defaults to `t => t.id`** — supply `{ keyBy: (t) => t.uuid }` for items keyed on something else.
 - **Writes produce a new array** — `source.value` is replaced with an immutably-updated copy, so downstream `computed` / `effect` / keyed `each()` re-run correctly.
 
-When `bindField()` doesn't fit — deep nested paths, writes that touch multiple fields atomically, or custom logic like optimistic updates — fall back to the manual event pair:
+For forms on **nested objects** (e.g. `user.profile.email`), reach for `bindPath()` — same spread shape, object-keyed path instead of a single field, opt-in at `@whisq/core/forms` so it doesn't cost top-level bundle size:
+
+```ts
+import { bindPath } from "@whisq/core/forms";
+
+input({ ...bindPath(user, ["profile", "email"]) });
+// Writes produce a new root with structural sharing on siblings —
+// user.prefs stays === across writes to user.profile.email.
+```
+
+`bindPath` does **not** traverse arrays. For array-indexed paths, reach for `bindField()` at the array level and compose from there.
+
+When none of the helpers fit — deep nested paths that cross arrays, writes that touch multiple fields atomically, or custom logic like optimistic updates — fall back to the manual event pair:
 
 ```ts
 input({
@@ -141,4 +153,5 @@ The manual pair is strictly more powerful but also strictly more verbose. Prefer
 - [`each()` API reference](../src/elements.ts) — the `{ key }` callback passes accessors (WHISQ-62).
 - [`bind()` API reference](../src/bind.ts) — exhaustive options for single-signal inputs.
 - [`bindField()` API reference](../src/bindField.ts) — field-in-array-item binding (WHISQ-78).
+- [`bindPath()` API reference](../src/bindPath.ts) — nested-object-path binding (WHISQ-86), exported from `@whisq/core/forms`.
 - [`batch-semantics.md`](./batch-semantics.md) — how `batch()` sequences effect flushes across multiple writes.
