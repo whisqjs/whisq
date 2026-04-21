@@ -101,23 +101,105 @@ div(
 
 ---
 
-## A note on what stays live across component boundaries
+## Accessors across component boundaries
 
-All three access shapes survive being passed as component props, provided you pass **the accessor itself**, not a snapshot.
+All three access shapes survive being passed as component props — **as long as you pass the accessor itself, not a snapshot**. This section covers what that means in practice, what fails if you snapshot, and which prop shape to pick for each source.
+
+### What survives the boundary
+
+- **Signals** — pass the signal object. The child reads `.value` inside its own `() =>`.
+- **Keyed-`each` items** — pass the accessor function (`todo` as received from the render callback — don't call it at the parent). The child calls `props.todo()` inside its own `() =>`.
+- **`resource()` fields** — pass the accessor function (`users.data` — don't call it). The child calls `props.data()` inside its own `() =>`.
+
+The common rule: **the thing you hand to the child must be re-readable**. A raw `.value` or `todo()` read at the parent is a snapshot — the child gets a frozen copy and never sees updates.
+
+### Worked example: split a todo row into its own component
 
 ```ts
-// Good: the child receives an accessor; reads stay live.
-const TodoItem = component((props: { todo: () => Todo }) => {
-  return li(() => props.todo().text);   // shape 2 — still works across boundary
-});
+// parent: owns the todos signal
+type Todo = { id: string; text: string; done: boolean };
+const todos = signal<Todo[]>([
+  { id: "a", text: "groceries", done: false },
+  { id: "b", text: "ship release", done: true },
+]);
 
-// Bad: a snapshot captured once at parent setup; goes stale on array replacement.
-const TodoItem = component((props: { todo: Todo }) => {
-  return li(props.todo.text);           // frozen at first render
+function TodoList() {
+  return ul(
+    each(
+      () => todos.value,
+      (todo) => TodoItem({ todo }),            // pass the accessor as-is
+      { key: (t) => t.id },
+    ),
+  );
+}
+
+// child: reads props.todo() inside its own getters
+const TodoItem = component((props: { todo: () => Todo }) => {
+  return li(
+    input({
+      type: "checkbox",
+      ...bindField(todos, props.todo, "done", { as: "checkbox" }),
+    }),
+    span(() => props.todo().text),              // re-reads on every source change
+    button(
+      { onclick: () => remove(props.todo().id) },
+      "✕",
+    ),
+  );
 });
 ```
 
-This is the subject of [#80](https://github.com/whisqjs/whisq/issues/80) — the worked example for component-boundary handoffs. If you pass a bare signal (`{ count: sig }` rather than `{ count: () => sig.value }`), children read `.value` inside their own `() =>`. Both work; pick based on what the child needs to do with it.
+Everything the child needs is reachable from `props.todo()`. Nothing is captured in a local variable at setup. When the parent replaces `todos.value` with a new array that still contains the same `id`, the reconciler reuses this `TodoItem` instance; the per-entry `itemSig` gets the new object; `props.todo()` returns that new object; every getter in the child re-reads.
+
+### Counter-example: snapshot at setup (the bug you can't reproduce in a unit test)
+
+```ts
+// DON'T DO THIS
+const TodoItem = component((props: { todo: () => Todo }) => {
+  const todo = props.todo();                    // snapshot captured once
+  return li(
+    span(todo.text),                            // static — never updates
+    button(
+      { onclick: () => remove(todo.id) },       // stale id after reorder
+      "✕",
+    ),
+  );
+});
+```
+
+Symptoms:
+
+- The todo row renders once, then never reflects changes to `.text` or `.done` made elsewhere.
+- After reordering the list, clicking `✕` may remove the wrong row — the closure holds the old item's `.id`.
+- Nothing _throws_. No dev-mode error. The UI just quietly falls out of sync.
+
+The failure mode is unmistakable once you know it, but unreproducible in a fresh-mount test — you only see it on the second parent state change. That's exactly why the rule needs to be written down rather than left as tribal knowledge.
+
+### Passing a signal vs. passing an accessor
+
+Both shapes work; pick by who "owns" the binding.
+
+| Parent holds          | Prop shape to pass                  | Child reads via        |
+| --------------------- | ----------------------------------- | ---------------------- |
+| A `Signal<T>`          | `{ count: sig }` (the signal itself) | `() => props.count.value` |
+| A `Signal<T>` — child should only read  | `{ count: () => sig.value }` (pre-wrapped getter) | `() => props.count()` |
+| A keyed-`each` item    | `{ todo }` (the accessor)            | `() => props.todo()`   |
+| A `resource()` field   | `{ data: users.data }` (the accessor) | `() => props.data()`   |
+
+- Pass the raw signal when the child might need to **write** (`bind(props.sig)`). The signal object carries both read and write.
+- Pass a pre-wrapped getter `() => sig.value` when the child should **only read** — the type `() => T` is the smallest capability and is identical-shaped to the keyed-each/resource case, so generic child components can accept any of them.
+- **Never call the accessor at the parent** — `TodoItem({ todo: todo() })` snapshots it.
+
+### Common mistakes at the boundary
+
+| Mistake                                         | What happens                                                      | Fix                                             |
+| ----------------------------------------------- | ----------------------------------------------------------------- | ----------------------------------------------- |
+| `TodoItem({ todo: todo() })` (call at parent)   | Child receives frozen item; stale after array replacement.       | `TodoItem({ todo })` — pass the accessor.       |
+| `const todo = props.todo()` inside child setup   | Snapshots at first mount; ignores later updates.                 | Read inside each getter: `() => props.todo().x`. |
+| Destructuring props in setup (`const { todo } = props`) | Loses per-render re-read if Whisq ever swaps props (and is a footgun elsewhere too). | Read fields off `props` directly: `() => props.todo().text`. |
+| Passing `todos.value[0]` as a prop              | Same as snapshotting — you read `.value` at the parent.          | Pass a getter: `{ first: () => todos.value[0] }`. |
+
+See also the structural guards shipped in [#81](https://github.com/whisqjs/whisq/issues/81) — `WhisqStructureError` catches wrong-shaped children at the boundary and points at the fix.
 
 ---
 

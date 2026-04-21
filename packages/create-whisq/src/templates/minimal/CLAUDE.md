@@ -95,6 +95,25 @@ The `() => …` wrapper is uniform; what goes **inside** it depends on the sourc
 
 Signals use `.value`; accessors (keyed-each items, resource fields) are already callable — wrap them in `() =>` for reactivity. Full canonical reference: [`packages/core/docs/access-shapes.md`](https://github.com/whisqjs/whisq/blob/develop/packages/core/docs/access-shapes.md).
 
+#### Accessors across component boundaries
+
+When you split a child component that needs a reactive item, **pass the accessor — don't call it at the parent**:
+
+```ts
+// parent
+each(() => todos.value, (todo) => TodoItem({ todo }), { key: t => t.id })
+
+// child — read inside each getter, never destructure props or snapshot at setup
+const TodoItem = component((props: { todo: () => Todo }) => {
+  return li(
+    span(() => props.todo().text),                  // re-reads on every source change
+    button({ onclick: () => remove(props.todo().id) }, "✕"),
+  );
+});
+```
+
+Snapshotting (`const todo = props.todo()` at setup) makes the row freeze at mount — no error, just silent staleness after the next array change. The [access-shapes.md](https://github.com/whisqjs/whisq/blob/develop/packages/core/docs/access-shapes.md) doc covers the full mistake table and the prop-shape variants (pass a signal when the child needs to write; pass a getter when it only reads).
+
 ### Events
 
 ```ts
