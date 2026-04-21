@@ -1,23 +1,25 @@
 # Reactive shapes — the four patterns
 
-Canonical reference for the ways reactive data flows into the UI layer. Pinned here alongside [`batch-semantics.md`](./batch-semantics.md) so the docs site's LLM reference card can port this verbatim.
+Canonical reference for **where** reactive data flows into the UI layer. Pinned here alongside [`batch-semantics.md`](./batch-semantics.md) and [`access-shapes.md`](./access-shapes.md) so the docs site's LLM reference card can port this verbatim.
 
-Whisq's marketing thesis is "uniform value access" — every reactive position accepts `() => value`. That's true, but in practice there are **four subtly different shapes** you pick between. The "uniform" framing undersells the decision tree. This doc enumerates them and tells you when to use each.
+Every reactive position in the API accepts `() => value` — that wrapper is uniform. What you put inside the wrapper depends on the source ([`access-shapes.md`](./access-shapes.md) enumerates those). What you put the wrapper _at_ is one of the four positions below. Pick the access shape first, then the position shape, then wire the two together.
 
 ---
 
 ## The four shapes at a glance
 
-| #   | Shape                 | Example                                                            | Use when                                                                  |
-| --- | --------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------- |
-| 1   | Getter **child**      | `span(() => count.value)`                                          | A signal drives inline text or a nested element                           |
-| 2   | Getter **prop**       | `{ class: () => active.value ? "on" : "off" }`                     | A signal drives an element attribute / style / class                      |
-| 3   | **`bind()`** spread   | `input({ ...bind(email) })`                                        | Two-way binding one signal into one form input you own                    |
-| 4   | **Manual event pair** | `{ checked: () => todo().done, onchange: e => toggle(todo().id) }` | A field inside an item inside a signal-backed array (inside keyed `each`) |
+| # | Shape                     | Example                                                                            | Use when                                                                                |
+| - | ------------------------- | ---------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| 1 | Getter **child**          | `span(() => count.value)`                                                          | A signal drives inline text or a nested element                                         |
+| 2 | Getter **prop**           | `{ class: () => active.value ? "on" : "off" }`                                     | A signal drives an element attribute / style / class                                    |
+| 3 | **`bind()`** spread       | `input({ ...bind(email) })`                                                        | Two-way binding one signal into one form input you own                                  |
+| 4 | **`bindField()`** spread  | `input({ type: "checkbox", ...bindField(todos, todo, "done", { as: "checkbox" }) })` | A field inside an item inside a signal-backed array (inside keyed `each`)               |
+
+Escape hatch: when `bindField()` doesn't fit (deep paths, custom write logic), fall back to a **manual event pair** — `{ checked: () => todo().done, onchange: e => toggle(todo().id) }`. Same idea, more code.
 
 A one-sentence decision flow:
 
-> _"Is the reactive value a single signal you own? → `bind()`. Is it a field inside an item inside a signal-held array? → manual pair, reading through the `each` accessor (`todo()`), not a closed-over reference."_
+> _"Is the reactive value a single signal you own? → `bind()`. Is it a field inside an item inside a signal-held array? → `bindField()`."_
 
 ---
 
@@ -78,19 +80,13 @@ Variants:
 - `bind(sig, { as: "checkbox" })` — binds the `checked` property
 - `bind(sig, { as: "radio", value: "admin" })` — binds a radio group member
 
-## Shape 4 — Manual event pair (inside keyed `each`)
+## Shape 4 — `bindField()` spread (inside keyed `each`)
 
-When the thing you want to update lives as a field on an item inside a signal-backed array, `bind()` doesn't apply. The array is the signal; the field isn't independently addressable. Write the reactive read and the writer separately, and go through the `each` accessor to avoid the stale-snapshot trap.
+When the writable is a field on an item inside a signal-backed array, `bind()` doesn't apply — the array is the signal and the field isn't independently addressable. `bindField()` covers this case with the same spread shape as `bind()`, producing an immutable array update on write and surviving keyed-`each` array replacement.
 
 ```ts
 type Todo = { id: string; text: string; done: boolean };
 const todos = signal<Todo[]>([]);
-
-function toggle(id: string) {
-  todos.value = todos.value.map((t) =>
-    t.id === id ? { ...t, done: !t.done } : t,
-  );
-}
 
 ul(
   each(
@@ -99,20 +95,30 @@ ul(
       li(
         input({
           type: "checkbox",
-          checked: () => todo().done, // reactive read via accessor
-          onchange: () => toggle(todo().id), // writer — reads latest id too
+          ...bindField(todos, todo, "done", { as: "checkbox" }),
         }),
         span(() => todo().text),
-        button({ onclick: () => remove(todo().id) }, "✕"),
       ),
     { key: (t) => t.id },
   ),
 );
 ```
 
-- **Key observation:** `todo` is an **accessor function** (post WHISQ-62) — call it as `todo()` to get the current item, and wrap in `() =>` for reactive reads. Closing over `todo` and writing `todo.done` would be stale the moment you replaced the array with new objects at the same key.
-- **Why the manual pair and not `bind()`:** `bind()` assumes a single signal with a single writable value. Here the writable is a field on an item; updating it requires re-mapping the whole array.
-- **Why not `bind()` on a per-item signal:** you'd have to materialise a signal per field per item. Doable but usually over-engineered for lists that fit in memory.
+- **`todo` is an accessor** (post WHISQ-62) — call it as `todo()` to read the current item. `bindField()` reads it internally to find the target item at write time.
+- **`keyBy` defaults to `t => t.id`** — supply `{ keyBy: (t) => t.uuid }` for items keyed on something else.
+- **Writes produce a new array** — `source.value` is replaced with an immutably-updated copy, so downstream `computed` / `effect` / keyed `each()` re-run correctly.
+
+When `bindField()` doesn't fit — deep nested paths, writes that touch multiple fields atomically, or custom logic like optimistic updates — fall back to the manual event pair:
+
+```ts
+input({
+  type: "checkbox",
+  checked: () => todo().done,                      // reactive read via accessor
+  onchange: () => toggle(todo().id),               // writer — reads latest id
+}),
+```
+
+The manual pair is strictly more powerful but also strictly more verbose. Prefer `bindField()` when it applies.
 
 ---
 
@@ -125,12 +131,14 @@ ul(
 | `input({ value: email.value, oninput: e => email.value = e.target.value })`   | Works but verbose; risks forgetting both sides.                                       | `input({ ...bind(email) })`                         |
 | `each(..., (todo) => li(() => todo.done ? ...))` (closes over a stale `todo`) | `todo` is the accessor — `.done` on a function is `undefined`. TypeScript flags this. | `li(() => todo().done ? ...)`                       |
 | `items.value.push(x)`                                                         | In-place mutation doesn't notify.                                                     | `items.value = [...items.value, x]`                 |
-| `bind(todo, { as: "checkbox" })` inside keyed `each`                          | `todo` is an accessor, not a signal with `.value`.                                    | Manual pair (shape 4).                              |
+| `bind(todo, { as: "checkbox" })` inside keyed `each`                          | `todo` is an accessor, not a signal with `.value`.                                    | `bindField(source, todo, "done", { as: "checkbox" })` (shape 4). |
 
 ---
 
 ## See also
 
-- [`each()` API reference](../src/elements.ts) — the `{ key }` callback now passes accessors (WHISQ-62).
-- [`bind()` API reference](../src/bind.ts) — exhaustive options.
+- [`access-shapes.md`](./access-shapes.md) — **how** you read reactive values (signal, keyed-each accessor, resource field). Paired with this doc.
+- [`each()` API reference](../src/elements.ts) — the `{ key }` callback passes accessors (WHISQ-62).
+- [`bind()` API reference](../src/bind.ts) — exhaustive options for single-signal inputs.
+- [`bindField()` API reference](../src/bindField.ts) — field-in-array-item binding (WHISQ-78).
 - [`batch-semantics.md`](./batch-semantics.md) — how `batch()` sequences effect flushes across multiple writes.
