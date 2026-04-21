@@ -12,7 +12,7 @@ import {
   div, span, h1, h2, h3, p, button, input, textarea, select, option,
   a, img, ul, ol, li, table, thead, tbody, tr, th, td, form, label,
   header, footer, nav, main, section, article, aside, strong, em,
-  h, raw, when, each, mount,
+  h, raw, when, match, each, mount,
   component, onMount, onCleanup, resource,
 } from "@whisq/core";
 ```
@@ -127,9 +127,10 @@ div({ onmouseenter: () => hovered.value = true })
 input({ onkeydown: (e) => e.key === "Enter" && submit() })
 ```
 
-### Conditional Rendering — when()
+### Conditional Rendering — when() / match()
 
 ```ts
+// when() — two-way (if / else). Third arg is the else branch.
 div(
   when(() => loggedIn.value,
     () => p("Welcome back!"),
@@ -141,7 +142,21 @@ div(
 div(
   () => isError.value ? p({ class: "error" }, "Something broke") : null,
 )
+
+// match() — predicate chain (if / else-if / ...). First-true-wins.
+// NOT pattern matching — branches are tuples [() => predicate, () => render].
+// Optional trailing bare function is the fallback.
+div(
+  match(
+    [() => users.loading(),  () => p("Loading...")],
+    [() => !!users.error(),  () => p({ class: "error" }, () => users.error().message)],
+    [() => !!users.data(),   () => List({ items: users.data() })],
+    () => p("No data yet."), // fallback — last position only
+  ),
+)
 ```
+
+Use `when()` for if/else, `match()` for if / else-if chains. For value dispatch (switch on a signal), use an inline getter: `() => { switch (status.value) { case "ready": return ReadyView(); /* ... */ } }` — that's a different shape from `match`.
 
 ### List Rendering — each()
 

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { signal } from "../reactive.js";
 import { div, p, span, match, mount } from "../elements.js";
+import { WhisqStructureError } from "../dev-errors.js";
 
 let container: HTMLElement;
 let dispose: () => void;
@@ -117,5 +118,64 @@ describe("match()", () => {
     const node = div(match(() => p("only the fallback")));
     dispose = mount(node, container);
     expect(container.querySelector("p")!.textContent).toBe("only the fallback");
+  });
+});
+
+// ── dev-mode validation (WHISQ-83) ─────────────────────────────────────────
+
+describe("match() — dev-mode input validation", () => {
+  it("throws WhisqStructureError for the object-dispatch shape GPT expected", () => {
+    expect(() => {
+      match(
+        // User reaching for pattern-matching on a value with an object map.
+        // `match` is a predicate chain — object dispatch isn't supported.
+        { loading: () => p("Loading") } as never,
+      );
+    }).toThrow(WhisqStructureError);
+
+    try {
+      match({ loading: () => p("Loading") } as never);
+    } catch (err) {
+      expect((err as Error).message).toMatch(/predicate chain/);
+      expect((err as WhisqStructureError).element).toBe("match");
+    }
+  });
+
+  it("throws when a branch tuple has the wrong arity or non-function members", () => {
+    expect(() => {
+      match([() => true, () => p("ok"), "extra"] as never);
+    }).toThrow(/branch tuple/);
+
+    expect(() => {
+      match([true, () => p("ok")] as never);
+    }).toThrow(/branch tuple/);
+  });
+
+  it("throws when the fallback is not in the last position", () => {
+    expect(() => {
+      match(
+        [() => true, () => p("a")],
+        () => p("fallback out of place"),
+        [() => false, () => p("b")],
+      );
+    }).toThrow(/fallback render.*last/);
+  });
+
+  it("does NOT throw for the canonical shape (regression guard)", () => {
+    expect(() => {
+      match(
+        [() => true, () => p("a")],
+        [() => false, () => p("b")],
+        () => p("fallback"),
+      );
+    }).not.toThrow();
+
+    expect(() => {
+      match([() => true, () => p("only")]);
+    }).not.toThrow();
+
+    expect(() => {
+      match();
+    }).not.toThrow();
   });
 });
