@@ -54,7 +54,7 @@ Eight copy-paste prompts that exercise different surfaces of the framework (todo
 - **~5 KB gzipped** — complete framework (core: 5.08 KB).
 - **Zero build step** — runs as plain JavaScript, works with any bundler.
 - **100% TypeScript** — every element function fully typed, inferred through components.
-- **No footguns** — uniform `() => value` reactive pattern, no hooks rules, no dependency arrays, no stale-closure tax.
+- **One reactive wrapper** — every reactive position accepts `() => …`. No hooks rules, no dependency arrays, no stale-closure tax. ([Three read shapes inside the wrapper](packages/core/docs/access-shapes.md) — signal / keyed-each accessor / resource field.)
 
 ## Get started
 

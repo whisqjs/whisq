@@ -83,6 +83,18 @@ Four shapes cover every reactive position. The one-line decision flow: *"single 
 
 Inside a keyed `each(..., { key })`, the callback’s `item` is an **accessor function** — call it (`todo()`) to read the current item. Getters that close over `todo` directly go stale when the array is replaced.
 
+#### Three ways to read inside a getter
+
+The `() => …` wrapper is uniform; what goes **inside** it depends on the source.
+
+| Source              | Read inside getter       |
+| ------------------- | ------------------------ |
+| Plain signal        | `() => sig.value`      |
+| Keyed `each` item | `() => todo().text`    |
+| `resource()` field | `() => users.loading()` |
+
+Signals use `.value`; accessors (keyed-each items, resource fields) are already callable — wrap them in `() =>` for reactivity. Full canonical reference: [`packages/core/docs/access-shapes.md`](https://github.com/whisqjs/whisq/blob/develop/packages/core/docs/access-shapes.md).
+
 ### Events
 
 ```ts
