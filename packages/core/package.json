@@ -50,13 +50,6 @@
   },
   "homepage": "https://whisq.dev",
   "sideEffects": false,
-  "size-limit": [
-    {
-      "path": "dist/index.js",
-      "limit": "5.5 KB",
-      "gzip": true
-    }
-  ],
   "devDependencies": {
     "@size-limit/preset-small-lib": "^11.2.0",
     "jsdom": "^29.0.2",

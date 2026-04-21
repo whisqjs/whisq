@@ -6,6 +6,7 @@
 
 import { signal, effect } from "./reactive.js";
 import type { WhisqTemplate } from "./template.js";
+import { WhisqStructureError, describeValue } from "./dev-errors.js";
 
 type CleanupFn = () => void;
 
@@ -85,6 +86,22 @@ export function component<P extends Record<string, any> = {}>(
       template = setup(props);
     } finally {
       contextStack.pop();
+    }
+
+    if (process.env.NODE_ENV !== "production") {
+      if (
+        template == null ||
+        typeof template !== "object" ||
+        !("el" in template) ||
+        !("dispose" in template)
+      ) {
+        throw new WhisqStructureError({
+          element: "component",
+          expected: "setup to return a WhisqNode (an element call like `div(...)`)",
+          received: describeValue(template),
+          hint: "Return the root element from your setup function: `return div(...)`. Bare strings, numbers, arrays, and null aren't valid component roots — wrap them in an element.",
+        });
+      }
     }
 
     // Run mount callbacks on next microtask (after DOM insertion)

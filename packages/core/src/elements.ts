@@ -14,6 +14,7 @@
 import { effect, isSignal, setEffectErrorHandler } from "./reactive.js";
 import { reconcileKeyed, type KeyedEntry } from "./reconcile.js";
 import type { Ref } from "./ref.js";
+import { WhisqStructureError, describeValue } from "./dev-errors.js";
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -635,11 +636,45 @@ export function each<T>(
     | ((item: () => T, index: () => number) => WhisqNode),
   options?: { key: (item: T) => unknown },
 ): (() => Child[]) | WhisqNode {
+  if (process.env.NODE_ENV !== "production") {
+    if (typeof items !== "function") {
+      throw new WhisqStructureError({
+        element: "each",
+        expected: "items to be a function `() => T[]`",
+        received: describeValue(items),
+        hint: "Pass a getter, not the array itself: `each(() => todos.value, ...)` not `each(todos.value, ...)`.",
+      });
+    }
+    if (typeof render !== "function") {
+      throw new WhisqStructureError({
+        element: "each",
+        expected: "render to be a function",
+        received: describeValue(render),
+      });
+    }
+  }
+
+  const getItems = (): T[] => {
+    const result = items();
+    if (process.env.NODE_ENV !== "production" && !Array.isArray(result)) {
+      throw new WhisqStructureError({
+        element: "each",
+        expected: "items() to return an array",
+        received: describeValue(result),
+        hint:
+          result == null
+            ? "Data hasn't loaded yet. Gate the list with `when(() => data(), () => ul(each(...)))` or return `[]` while loading."
+            : "Return an array from the items getter — objects and maps need to be converted first (e.g. `Object.values(users.value)`).",
+      });
+    }
+    return result;
+  };
+
   if (!options?.key) {
     // Non-keyed: simple map — items are snapshots per render, no staleness
     // issue because nodes are recreated on every source change.
     const renderSnapshot = render as (item: T, index: number) => WhisqNode;
-    return () => items().map((item, i) => renderSnapshot(item, i));
+    return () => getItems().map((item, i) => renderSnapshot(item, i));
   }
 
   // Keyed: return a WhisqNode that manages its own reconciliation.
@@ -661,7 +696,7 @@ export function each<T>(
   fragment.appendChild(marker);
 
   const dispose = effect(() => {
-    const newItems = items();
+    const newItems = getItems();
     const parent = marker.parentNode;
     if (!parent) return;
 
@@ -1032,6 +1067,19 @@ function appendChildren(
     disposers.push(dispose);
     return;
   }
+
+  if (process.env.NODE_ENV !== "production") {
+    throw new WhisqStructureError({
+      element: (parent as Element).tagName?.toLowerCase() ?? "element",
+      expected:
+        "WhisqNode | string | number | boolean | null | undefined | function | array",
+      received: describeValue(child),
+      hint:
+        typeof child === "object" && !Array.isArray(child)
+          ? "Plain objects can't be rendered as children. Did you forget to call a component (`MyComponent({})` not `MyComponent`), or wrap a signal read in `() => signal.value`?"
+          : undefined,
+    });
+  }
 }
 
 function renderChild(
@@ -1067,5 +1115,18 @@ function renderChild(
     tracker.push(child.el);
     disposers.push(() => child.dispose());
     return;
+  }
+
+  if (process.env.NODE_ENV !== "production") {
+    throw new WhisqStructureError({
+      element: (parent as Element).nodeName?.toLowerCase() ?? "element",
+      expected:
+        "WhisqNode | string | number | boolean | null | undefined | array",
+      received: describeValue(child),
+      hint:
+        typeof child === "function"
+          ? "A reactive child `() => value` returned another function. Did you wrap a getter twice (`() => () => sig.value`)?"
+          : "Plain objects can't be rendered. If this came from a signal, wrap the read in `() => ...`; if it's a component, call it: `MyComponent({})`.",
+    });
   }
 }
