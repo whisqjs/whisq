@@ -121,3 +121,5 @@ export type {
   RadioBind,
   BindOptions,
 } from "./bind.js";
+export { bindField } from "./bindField.js";
+export type { BindFieldOptions } from "./bindField.js";
