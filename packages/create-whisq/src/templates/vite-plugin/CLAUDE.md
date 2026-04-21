@@ -260,6 +260,22 @@ export const addItem = (item) => { items.value = [...items.value, item]; };
 import { items, total, addItem } from "./stores/cart";
 ```
 
+### Persisted stores (opt-in, sub-path import)
+
+Use `persistedSignal` when a store should survive reloads. It is in a sub-path export so apps that don't need it pay no bundle cost.
+
+```ts
+// stores/todos.ts
+import { persistedSignal } from "@whisq/core/persistence";
+
+export const todos = persistedSignal<Todo[]>("todos", []);
+// - reads from localStorage on init, writes on change
+// - SSR-safe (returns initial when window is undefined)
+// - falls back to initial on parse/schema error; warns on quota-exceeded
+```
+
+Call at module scope in `stores/` — the write effect lives for the module lifetime by design.
+
 ## Anti-Patterns (DO NOT)
 
 - ❌ `html\`...\`` — use element functions instead (div, span, button...)

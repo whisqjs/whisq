@@ -14,6 +14,10 @@
     "./collections": {
       "types": "./dist/collections.d.ts",
       "import": "./dist/collections.js"
+    },
+    "./persistence": {
+      "types": "./dist/persistence.d.ts",
+      "import": "./dist/persistence.js"
     }
   },
   "files": [
