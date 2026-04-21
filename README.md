@@ -18,7 +18,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-5CE0F2" alt="License"></a>
 </p>
 
-Whisq is designed so large language models produce working code on the first try. The complete framework is under 5 KB gzipped and the full API fits in a prompt. No hooks rules. No reactivity caveats. No compile-time magic — just signals for state, functions for UI.
+Whisq is designed so large language models produce working code on the first try. The complete framework is ~5 KB gzipped and the full API fits in a prompt. No hooks rules. No reactivity caveats. No compile-time magic — just signals for state, functions for UI.
 
 ```ts
 import { signal, component, div, button, span, mount } from "@whisq/core";
@@ -51,7 +51,7 @@ Eight copy-paste prompts that exercise different surfaces of the framework (todo
 
 ## For humans
 
-- **Under 5 KB gzipped** — complete framework (core: 4.83 KB).
+- **~5 KB gzipped** — complete framework (core: 5.08 KB).
 - **Zero build step** — runs as plain JavaScript, works with any bundler.
 - **100% TypeScript** — every element function fully typed, inferred through components.
 - **No footguns** — uniform `() => value` reactive pattern, no hooks rules, no dependency arrays, no stale-closure tax.
@@ -71,7 +71,7 @@ Four templates: `minimal`, `full-app` (router + pages + store), `ssr`, `vite-plu
 
 | Package                                      | Description                                  | Size    |
 | -------------------------------------------- | -------------------------------------------- | ------- |
-| [`@whisq/core`](packages/core)               | Signals, elements, components, styling       | 4.83 KB |
+| [`@whisq/core`](packages/core)               | Signals, elements, components, styling       | 5.08 KB |
 | [`@whisq/router`](packages/router)           | Signal-based client-side routing             | 2.85 KB |
 | [`@whisq/ssr`](packages/ssr)                 | Server-side rendering + streaming            | 982 B   |
 | [`@whisq/testing`](packages/testing)         | Render, query, fireEvent, userEvent, waitFor | —       |
