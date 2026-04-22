@@ -1,8 +1,8 @@
 import { describe, it, expect, vi } from "vitest";
-import { effect } from "../reactive.js";
+import { signal, effect } from "../reactive.js";
 // Imported from the internal module path. Public API is
 // `@whisq/core/collections` (see packages/core/package.json exports).
-import { signalMap, signalSet } from "../collections.js";
+import { signalMap, signalSet, partition } from "../collections.js";
 
 describe("signalMap()", () => {
   it("accepts initial entries", () => {
@@ -261,5 +261,92 @@ describe("signalSet()", () => {
     const res = s.add("a").add("b");
     expect(res).toBe(s);
     expect(s.size).toBe(2);
+  });
+});
+
+// ── partition (WHISQ-101) ───────────────────────────────────────────────────
+
+describe("partition()", () => {
+  type Todo = { id: string; done: boolean };
+
+  it("splits a static source into matching / not-matching tuples", () => {
+    const todos = signal<Todo[]>([
+      { id: "a", done: false },
+      { id: "b", done: true },
+      { id: "c", done: false },
+    ]);
+    const [pending, done] = partition(() => todos.value, (t) => !t.done);
+    expect(pending.value.map((t) => t.id)).toEqual(["a", "c"]);
+    expect(done.value.map((t) => t.id)).toEqual(["b"]);
+  });
+
+  it("re-derives both sides when the source changes", () => {
+    const todos = signal<Todo[]>([{ id: "a", done: false }]);
+    const [pending, done] = partition(() => todos.value, (t) => !t.done);
+
+    expect(pending.value).toHaveLength(1);
+    expect(done.value).toHaveLength(0);
+
+    todos.value = [
+      { id: "a", done: true },
+      { id: "b", done: false },
+    ];
+    expect(pending.value.map((t) => t.id)).toEqual(["b"]);
+    expect(done.value.map((t) => t.id)).toEqual(["a"]);
+  });
+
+  it("returns two empty arrays when the source is empty", () => {
+    const src = signal<Todo[]>([]);
+    const [yes, no] = partition(() => src.value, (t) => t.done);
+    expect(yes.value).toEqual([]);
+    expect(no.value).toEqual([]);
+  });
+
+  it("handles all-match and all-not-match cases", () => {
+    const allDone = signal<Todo[]>([
+      { id: "a", done: true },
+      { id: "b", done: true },
+    ]);
+    const [done, pending] = partition(() => allDone.value, (t) => t.done);
+    expect(done.value).toHaveLength(2);
+    expect(pending.value).toHaveLength(0);
+
+    allDone.value = [
+      { id: "c", done: false },
+      { id: "d", done: false },
+    ];
+    expect(done.value).toHaveLength(0);
+    expect(pending.value).toHaveLength(2);
+  });
+
+  it("each signal participates in effect tracking independently", () => {
+    const todos = signal<Todo[]>([{ id: "a", done: false }]);
+    const [pending, done] = partition(() => todos.value, (t) => !t.done);
+    const pendingRuns: number[] = [];
+    const doneRuns: number[] = [];
+
+    effect(() => {
+      pendingRuns.push(pending.value.length);
+    });
+    effect(() => {
+      doneRuns.push(done.value.length);
+    });
+
+    expect(pendingRuns).toEqual([1]);
+    expect(doneRuns).toEqual([0]);
+
+    todos.value = [
+      { id: "a", done: true },
+      { id: "b", done: false },
+    ];
+    expect(pendingRuns.at(-1)).toBe(1);
+    expect(doneRuns.at(-1)).toBe(1);
+  });
+
+  it("preserves source order in both output arrays", () => {
+    const nums = signal<number[]>([1, 2, 3, 4, 5, 6]);
+    const [even, odd] = partition(() => nums.value, (n) => n % 2 === 0);
+    expect(even.value).toEqual([2, 4, 6]);
+    expect(odd.value).toEqual([1, 3, 5]);
   });
 });

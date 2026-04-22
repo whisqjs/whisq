@@ -22,6 +22,10 @@
     "./forms": {
       "types": "./dist/forms.d.ts",
       "import": "./dist/forms.js"
+    },
+    "./ids": {
+      "types": "./dist/ids.d.ts",
+      "import": "./dist/ids.js"
     }
   },
   "files": [

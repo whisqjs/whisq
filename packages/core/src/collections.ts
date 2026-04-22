@@ -7,7 +7,12 @@
 // as the rest of the reactive core.
 // ============================================================================
 
-import { signal, type Signal } from "./reactive.js";
+import {
+  signal,
+  computed,
+  type Signal,
+  type ReadonlySignal,
+} from "./reactive.js";
 
 const MISSING: unique symbol = Symbol("whisq.collections.missing");
 type Missing = typeof MISSING;
@@ -240,4 +245,36 @@ export function signalSet<T>(initial?: Iterable<T>): SignalSet<T> {
   };
 
   return set;
+}
+
+// ── partition ──────────────────────────────────────────────────────────────
+
+/**
+ * Split a signal-held array into two derived signals — one with items that
+ * match the predicate, one with items that don't. Both sides re-compute
+ * when the source changes; source order is preserved on both sides.
+ *
+ * ```ts
+ * const todos = signal<Todo[]>([...]);
+ * const [pending, done] = partition(() => todos.value, (t) => !t.done);
+ *
+ * p(() => `${pending.value.length} left`);
+ * p(() => `${done.value.length} done`);
+ * button({ onclick: () => todos.value = pending.value }, "Clear completed");
+ * ```
+ *
+ * Each side is an independent `ReadonlySignal<T[]>` — subscribing to one
+ * does not subscribe to the other, and each re-runs its own effects only
+ * when its portion of the result would change in content. (That's
+ * reference-equality on the produced arrays, matching `computed()`
+ * semantics — structural equality is the caller's job if they need it.)
+ */
+export function partition<T>(
+  source: () => T[],
+  predicate: (item: T) => boolean,
+): [ReadonlySignal<T[]>, ReadonlySignal<T[]>] {
+  return [
+    computed(() => source().filter(predicate)),
+    computed(() => source().filter((item) => !predicate(item))),
+  ];
 }
