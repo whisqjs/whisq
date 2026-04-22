@@ -74,9 +74,26 @@ type ReactiveProp<T> = T | (() => T);
 type StyleValue = string | number | null | undefined;
 export type StyleObject = Record<string, StyleValue | (() => StyleValue)>;
 
+/**
+ * A single source inside a `class: [...]` array. Strings become class names;
+ * falsy values (`false | null | undefined | 0 | ""`) are filtered out,
+ * enabling the `cond && "active"` shorthand; functions are reactive — each
+ * function is called during the render effect, so reads inside it track.
+ */
+export type ClassArraySource =
+  | string
+  | false
+  | null
+  | undefined
+  | 0
+  | ""
+  | (() => string | false | null | undefined);
+
 interface BaseProps {
   ref?: Ref;
-  class?: ReactiveProp<string | undefined>;
+  class?:
+    | ReactiveProp<string | undefined>
+    | readonly ClassArraySource[];
   id?: ReactiveProp<string | undefined>;
   style?: ReactiveProp<string | undefined> | StyleObject;
   hidden?: ReactiveProp<boolean>;
@@ -224,6 +241,22 @@ export function h(
       if (key === "style" && isPlainStyleObject(value)) {
         // Style object — per-property reactive subscriptions
         applyStyleObject(el as HTMLElement, value, disposers);
+        continue;
+      }
+      if (key === "class" && Array.isArray(value)) {
+        // Array form (WHISQ-97): class: ["btn", () => ..., cond && "x"].
+        // Reactive if any source is a function; static otherwise. Falsy
+        // sources (false / null / undefined / 0 / "") are filtered out.
+        const sources = value as readonly ClassArraySource[];
+        const hasReactive = sources.some((s) => typeof s === "function");
+        if (hasReactive) {
+          const dispose = effect(() => {
+            applyProp(el, "class", joinClassArray(sources));
+          });
+          disposers.push(dispose);
+        } else {
+          applyProp(el, "class", joinClassArray(sources));
+        }
         continue;
       }
       if (key.startsWith("on") && typeof value === "function") {
@@ -1004,6 +1037,20 @@ function isPlainStyleObject(value: unknown): value is StyleObject {
   }
   const proto = Object.getPrototypeOf(value);
   return proto === Object.prototype || proto === null;
+}
+
+function joinClassArray(sources: readonly ClassArraySource[]): string {
+  const parts: string[] = [];
+  for (const src of sources) {
+    if (!src) continue; // filters false / null / undefined / 0 / ""
+    if (typeof src === "string") {
+      parts.push(src);
+    } else if (typeof src === "function") {
+      const result = src();
+      if (result) parts.push(result);
+    }
+  }
+  return parts.join(" ");
 }
 
 function camelToKebab(str: string): string {

@@ -83,7 +83,12 @@ export {
   hr,
   iframe,
 } from "./elements.js";
-export type { WhisqNode, EventHandler, WhisqEvent } from "./elements.js";
+export type {
+  WhisqNode,
+  EventHandler,
+  WhisqEvent,
+  ClassArraySource,
+} from "./elements.js";
 
 // Component model
 export {

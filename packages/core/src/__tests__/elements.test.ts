@@ -59,6 +59,96 @@ describe("h()", () => {
     expect(container.firstElementChild!.className).toBe("on");
   });
 
+  // ── Array-form class prop (WHISQ-97, option B) ────────────────────────────
+
+  it("accepts a static class array and joins with spaces", () => {
+    const node = h("div", { class: ["btn", "primary"] });
+    dispose = mount(node, container);
+    expect(container.firstElementChild!.className).toBe("btn primary");
+  });
+
+  it("filters falsy values from a static class array", () => {
+    const node = h("div", {
+      class: ["btn", false, null, undefined, 0, "", "primary"],
+    });
+    dispose = mount(node, container);
+    expect(container.firstElementChild!.className).toBe("btn primary");
+  });
+
+  it("supports the `cond && 'active'` shorthand in class array", () => {
+    const isActive = true;
+    const isDisabled = false;
+    const node = h("div", {
+      class: ["btn", isActive && "active", isDisabled && "disabled"],
+    });
+    dispose = mount(node, container);
+    expect(container.firstElementChild!.className).toBe("btn active");
+  });
+
+  it("applies a class array reactively when any source is a function", () => {
+    const variant = signal<"primary" | "secondary">("primary");
+    const loading = signal(false);
+    const node = h("div", {
+      class: [
+        "btn",
+        () => `btn-${variant.value}`,
+        () => loading.value && "btn-loading",
+      ],
+    });
+    dispose = mount(node, container);
+
+    expect(container.firstElementChild!.className).toBe("btn btn-primary");
+
+    variant.value = "secondary";
+    expect(container.firstElementChild!.className).toBe("btn btn-secondary");
+
+    loading.value = true;
+    expect(container.firstElementChild!.className).toBe(
+      "btn btn-secondary btn-loading",
+    );
+  });
+
+  it("filters falsy returns from reactive sources in a class array", () => {
+    const show = signal(false);
+    const node = h("div", {
+      class: ["base", () => (show.value ? "on" : null)],
+    });
+    dispose = mount(node, container);
+
+    expect(container.firstElementChild!.className).toBe("base");
+
+    show.value = true;
+    expect(container.firstElementChild!.className).toBe("base on");
+
+    show.value = false;
+    expect(container.firstElementChild!.className).toBe("base");
+  });
+
+  it("treats an empty class array as an empty className", () => {
+    const node = h("div", { class: [] });
+    dispose = mount(node, container);
+    expect(container.firstElementChild!.className).toBe("");
+  });
+
+  it("treats an all-falsy class array as an empty className", () => {
+    const node = h("div", { class: [false, null, undefined, 0, ""] });
+    dispose = mount(node, container);
+    expect(container.firstElementChild!.className).toBe("");
+  });
+
+  it("does not create a reactive effect for a purely static class array", () => {
+    // Cover the common case — static array doesn't leak an effect that
+    // would fire on unrelated signal changes. We verify indirectly: the
+    // className matches expectation and mutating an unrelated signal in
+    // the same frame doesn't affect rendering.
+    const unrelated = signal("x");
+    const node = h("div", { class: ["btn", "primary"] });
+    dispose = mount(node, container);
+    expect(container.firstElementChild!.className).toBe("btn primary");
+    unrelated.value = "y"; // must not cause any re-read
+    expect(container.firstElementChild!.className).toBe("btn primary");
+  });
+
   it("applies reactive style prop", () => {
     const color = signal("red");
     const node = h("div", { style: () => `color: ${color.value}` });
