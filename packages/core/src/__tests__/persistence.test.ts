@@ -169,3 +169,100 @@ describe("persistedSignal() — reactivity", () => {
     expect(seen).toEqual([0, 1, 2]);
   });
 });
+
+describe("persistedSignal() — onSchemaFailure callback", () => {
+  it("fires with the parse error and the raw string when JSON is malformed", () => {
+    window.localStorage.setItem("bad-json", "{not json}");
+    const onSchemaFailure = vi.fn();
+    const s = persistedSignal("bad-json", { ok: true }, { onSchemaFailure });
+    expect(s.value).toEqual({ ok: true });
+    expect(onSchemaFailure).toHaveBeenCalledTimes(1);
+    const [err, raw] = onSchemaFailure.mock.calls[0]!;
+    expect(err).toBeInstanceOf(SyntaxError);
+    expect(raw).toBe("{not json}");
+  });
+
+  it("fires with the schema error and the raw string when the validator throws", () => {
+    const rawStored = '{"name":"alice","age":"oops"}';
+    window.localStorage.setItem("bad-schema", rawStored);
+    const onSchemaFailure = vi.fn();
+    const s = persistedSignal<{ name: string; age: number }>(
+      "bad-schema",
+      { name: "anon", age: 0 },
+      {
+        schema: (raw) => {
+          const v = raw as { name: string; age: unknown };
+          if (typeof v.age !== "number") throw new TypeError("age");
+          return v as { name: string; age: number };
+        },
+        onSchemaFailure,
+      },
+    );
+    expect(s.value).toEqual({ name: "anon", age: 0 });
+    expect(onSchemaFailure).toHaveBeenCalledTimes(1);
+    const [err, raw] = onSchemaFailure.mock.calls[0]!;
+    expect(err).toBeInstanceOf(TypeError);
+    expect((err as Error).message).toBe("age");
+    expect(raw).toBe(rawStored);
+  });
+
+  it("is NOT invoked on first visit (no stored value)", () => {
+    const onSchemaFailure = vi.fn();
+    const s = persistedSignal("first-visit", "default", { onSchemaFailure });
+    expect(s.value).toBe("default");
+    expect(onSchemaFailure).not.toHaveBeenCalled();
+  });
+
+  it("is NOT invoked on the happy path (well-formed JSON + schema accepts)", () => {
+    window.localStorage.setItem("ok-json", '{"name":"alice","age":30}');
+    const onSchemaFailure = vi.fn();
+    const s = persistedSignal<{ name: string; age: number }>(
+      "ok-json",
+      { name: "anon", age: 0 },
+      {
+        schema: (raw) => raw as { name: string; age: number },
+        onSchemaFailure,
+      },
+    );
+    expect(s.value).toEqual({ name: "alice", age: 30 });
+    expect(onSchemaFailure).not.toHaveBeenCalled();
+  });
+
+  it("is NOT invoked on storage-access errors (getItem throws)", () => {
+    const onSchemaFailure = vi.fn();
+    const originalGet = Storage.prototype.getItem;
+    Storage.prototype.getItem = function throwingGet() {
+      throw new Error("access denied");
+    };
+    try {
+      const s = persistedSignal("storage-denied", "fallback", {
+        onSchemaFailure,
+      });
+      expect(s.value).toBe("fallback");
+      expect(onSchemaFailure).not.toHaveBeenCalled();
+    } finally {
+      Storage.prototype.getItem = originalGet;
+    }
+  });
+
+  it("still falls back to initial when the callback itself throws", () => {
+    window.localStorage.setItem("cb-throws", "{not json}");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const onSchemaFailure = vi.fn(() => {
+      throw new Error("logger exploded");
+    });
+    try {
+      const s = persistedSignal("cb-throws", "initial", { onSchemaFailure });
+      expect(s.value).toBe("initial");
+      expect(onSchemaFailure).toHaveBeenCalledTimes(1);
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'persistedSignal: onSchemaFailure callback for "cb-throws" threw',
+        ),
+        expect.any(Error),
+      );
+    } finally {
+      warn.mockRestore();
+    }
+  });
+});

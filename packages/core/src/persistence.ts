@@ -24,6 +24,24 @@ export interface PersistedSignalOptions<T> {
    * and fall back to `initial`. Useful when the stored shape may have changed.
    */
   schema?: (raw: unknown) => T;
+  /**
+   * Called synchronously **before** falling back to `initial` when the stored
+   * payload can't be loaded. Fires on:
+   *
+   * - `deserialize(raw)` throwing (malformed stored JSON), or
+   * - `schema(parsed)` throwing (stored value rejected by the validator).
+   *
+   * Receives the thrown error and the exact `raw` string read from storage.
+   * Use for diagnostics (Sentry, analytics, migration prompts) — the fallback
+   * to `initial` still happens regardless of what the callback does.
+   *
+   * NOT invoked on first visit (no stored value — `raw` would be `null`, not
+   * a failure) or on storage-access errors (private mode, disabled storage
+   * — those are environment faults, not schema faults). If the callback
+   * itself throws, the exception is caught and logged via `console.warn` so
+   * a broken diagnostic pipeline can't prevent signal construction.
+   */
+  onSchemaFailure?: (err: unknown, raw: string) => void;
 }
 
 const getStorage = (which: "local" | "session"): Storage | null => {
@@ -68,17 +86,34 @@ export function persistedSignal<T>(
 
   let starting: T = initial;
   if (storage) {
+    let raw: string | null = null;
     try {
-      const raw = storage.getItem(key);
-      if (raw !== null) {
+      raw = storage.getItem(key);
+    } catch {
+      // Storage-access error (cross-origin iframe, privacy mode, etc.) —
+      // leave raw as null. This is an environment fault, not a schema
+      // fault, so `onSchemaFailure` does not fire.
+    }
+    if (raw !== null) {
+      try {
         const parsed = deserialize(raw) as unknown;
         starting = options?.schema
           ? options.schema(parsed)
           : (parsed as T);
+      } catch (err) {
+        starting = initial;
+        if (options?.onSchemaFailure) {
+          try {
+            options.onSchemaFailure(err, raw);
+          } catch (callbackError) {
+            // eslint-disable-next-line no-console
+            console.warn(
+              `persistedSignal: onSchemaFailure callback for "${key}" threw.`,
+              callbackError,
+            );
+          }
+        }
       }
-    } catch {
-      // Parse error, schema rejection, storage-access-error — fall through.
-      starting = initial;
     }
   }
 
