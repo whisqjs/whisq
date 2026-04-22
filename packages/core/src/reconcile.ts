@@ -11,7 +11,7 @@
 // ============================================================================
 
 import { signal, type Signal } from "./reactive.js";
-import type { WhisqNode } from "./elements.js";
+import type { WhisqNode, ItemAccessor } from "./elements.js";
 
 export interface KeyedEntry<T = unknown> {
   key: unknown;
@@ -20,6 +20,22 @@ export interface KeyedEntry<T = unknown> {
   itemSig: Signal<T>;
   /** Updated on reorder so `() => indexSig.value` getters see the new position. */
   indexSig: Signal<number>;
+}
+
+/**
+ * Wrap a per-entry signal as the hybrid accessor that the render callback
+ * receives. Callable (`acc()` → current value, tracks) AND signal-shaped
+ * (`acc.value` → tracks; `acc.peek()` → untracked). Both call paths read
+ * the same underlying `Signal<T>` that the reconciler updates on reuse.
+ */
+function makeItemAccessor<T>(sig: Signal<T>): ItemAccessor<T> {
+  const fn = (() => sig.value) as ItemAccessor<T>;
+  Object.defineProperty(fn, "value", {
+    get: () => sig.value,
+    enumerable: true,
+  });
+  (fn as { peek: () => T }).peek = () => sig.peek();
+  return fn;
 }
 
 /**
@@ -40,7 +56,10 @@ export function reconcileKeyed<T>(
   oldEntries: KeyedEntry<T>[],
   newItems: T[],
   keyFn: (item: T) => unknown,
-  renderFn: (item: () => T, index: () => number) => WhisqNode,
+  renderFn: (
+    item: ItemAccessor<T>,
+    index: ItemAccessor<number>,
+  ) => WhisqNode,
 ): KeyedEntry<T>[] {
   const newLen = newItems.length;
   const oldLen = oldEntries.length;
@@ -53,8 +72,8 @@ export function reconcileKeyed<T>(
       const itemSig = signal(newItems[i]);
       const indexSig = signal(i);
       const node = renderFn(
-        () => itemSig.value,
-        () => indexSig.value,
+        makeItemAccessor(itemSig),
+        makeItemAccessor(indexSig),
       );
       fragment.appendChild(node.el);
       entries[i] = { key: keyFn(newItems[i]), node, itemSig, indexSig };
@@ -135,8 +154,8 @@ export function reconcileKeyed<T>(
       const itemSig = signal(newItems[i]);
       const indexSig = signal(i);
       const node = renderFn(
-        () => itemSig.value,
-        () => indexSig.value,
+        makeItemAccessor(itemSig),
+        makeItemAccessor(indexSig),
       );
       newEntries[i] = { key: newKeys[i], node, itemSig, indexSig };
     }

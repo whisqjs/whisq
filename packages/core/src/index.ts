@@ -88,6 +88,7 @@ export type {
   EventHandler,
   WhisqEvent,
   ClassArraySource,
+  ItemAccessor,
 } from "./elements.js";
 
 // Component model

@@ -75,6 +75,34 @@ type StyleValue = string | number | null | undefined;
 export type StyleObject = Record<string, StyleValue | (() => StyleValue)>;
 
 /**
+ * The accessor passed to a keyed `each()`'s render callback. It is both
+ * **callable** (`todo()` returns the current item — backwards-compatible
+ * with pre-alpha.8 code) **and** **signal-shaped** (`todo.value`,
+ * `todo.peek()`) — new code should prefer `todo.value.<field>` for the
+ * uniform reactive-access rule.
+ *
+ * ```ts
+ * // new canonical shape — joins the `() => sig.value` pattern
+ * each(() => todos.value, (todo) =>
+ *   li(() => todo.value.text),
+ *   { key: (t) => t.id },
+ * )
+ *
+ * // still works (call form) — bindField and other `() => T` consumers
+ * // continue to accept the accessor without modification
+ * each(() => todos.value, (todo) =>
+ *   input({ ...bindField(todos, todo, "done", { as: "checkbox" }) }),
+ *   { key: (t) => t.id },
+ * )
+ * ```
+ */
+export interface ItemAccessor<T> {
+  (): T;
+  readonly value: T;
+  peek(): T;
+}
+
+/**
  * A single source inside a `class: [...]` array. Strings become class names;
  * falsy values (`false | null | undefined | 0 | ""`) are filtered out,
  * enabling the `cond && "active"` shorthand; functions are reactive — each
@@ -709,14 +737,20 @@ export function each<T>(
 ): () => Child[];
 export function each<T>(
   items: () => T[],
-  render: (item: () => T, index: () => number) => WhisqNode,
+  render: (
+    item: ItemAccessor<T>,
+    index: ItemAccessor<number>,
+  ) => WhisqNode,
   options: { key: (item: T) => unknown },
 ): WhisqNode;
 export function each<T>(
   items: () => T[],
   render:
     | ((item: T, index: number) => WhisqNode)
-    | ((item: () => T, index: () => number) => WhisqNode),
+    | ((
+        item: ItemAccessor<T>,
+        index: ItemAccessor<number>,
+      ) => WhisqNode),
   options?: { key: (item: T) => unknown },
 ): (() => Child[]) | WhisqNode {
   if (process.env.NODE_ENV !== "production") {
@@ -766,8 +800,8 @@ export function each<T>(
   // array is replaced with new items at the same key (WHISQ-62).
   const keyFn = options.key;
   const renderAccessor = render as (
-    item: () => T,
-    index: () => number,
+    item: ItemAccessor<T>,
+    index: ItemAccessor<number>,
   ) => WhisqNode;
   const marker = document.createComment("whisq-each");
   const disposers: (() => void)[] = [];

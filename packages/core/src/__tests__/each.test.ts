@@ -609,3 +609,146 @@ describe("each() with key — accessor callback", () => {
     expect(liAfter!.textContent).toBe("a-v2");
   });
 });
+
+// ── Hybrid accessor shape (WHISQ-96) ────────────────────────────────────────
+//
+// The keyed `each()` callback's `item` / `index` arguments are callable
+// (`item()`, `index()` — backwards-compatible) AND expose signal-like
+// `.value` / `.peek()` reads. The new `.value` shape joins the uniform
+// reactive-access pattern; the call form stays so helpers like `bindField`
+// (which expect `() => T`) keep working.
+
+describe("each() keyed — hybrid accessor shape (callable + .value + .peek)", () => {
+  type Item = { id: number; text: string };
+
+  it("item.value returns the current item (initial render)", () => {
+    const items = signal<Item[]>([{ id: 1, text: "a" }]);
+    let capturedValue: Item | undefined;
+
+    const node = ul(
+      each(
+        () => items.value,
+        (item) => {
+          capturedValue = item.value;
+          return li(() => item.value.text);
+        },
+        { key: (i) => i.id },
+      ),
+    );
+    dispose = mount(node, container);
+
+    expect(capturedValue).toEqual({ id: 1, text: "a" });
+    expect(container.firstElementChild!.querySelector("li")!.textContent).toBe(
+      "a",
+    );
+  });
+
+  it("item.value stays live after reconciliation reuses an entry", () => {
+    const items = signal<Item[]>([{ id: 1, text: "a" }]);
+
+    const node = ul(
+      each(
+        () => items.value,
+        (item) => li(() => item.value.text),
+        { key: (i) => i.id },
+      ),
+    );
+    dispose = mount(node, container);
+    const liBefore = container.firstElementChild!.querySelector("li");
+
+    items.value = [{ id: 1, text: "a-v2" }];
+    const liAfter = container.firstElementChild!.querySelector("li");
+
+    expect(liAfter).toBe(liBefore);
+    expect(liAfter!.textContent).toBe("a-v2");
+  });
+
+  it("item() and item.value return the same value at every read", () => {
+    const items = signal<Item[]>([{ id: 1, text: "a" }]);
+
+    const node = ul(
+      each(
+        () => items.value,
+        (item) => li(() => `${item().text}|${item.value.text}`),
+        { key: (i) => i.id },
+      ),
+    );
+    dispose = mount(node, container);
+    const liEl = container.firstElementChild!.querySelector("li")!;
+    expect(liEl.textContent).toBe("a|a");
+
+    items.value = [{ id: 1, text: "updated" }];
+    expect(liEl.textContent).toBe("updated|updated");
+  });
+
+  it("item.peek() returns the current item", () => {
+    const items = signal<Item[]>([{ id: 1, text: "a" }]);
+    const peeks: string[] = [];
+
+    const node = ul(
+      each(
+        () => items.value,
+        (item) =>
+          li(() => {
+            const tracked = item.value.text;
+            peeks.push(`peek=${item.peek().text}`);
+            return tracked;
+          }),
+        { key: (i) => i.id },
+      ),
+    );
+    dispose = mount(node, container);
+    expect(peeks[0]).toBe("peek=a");
+
+    items.value = [{ id: 1, text: "b" }];
+    expect(peeks[peeks.length - 1]).toBe("peek=b");
+  });
+
+  it("index.value returns the current index; updates on reorder", () => {
+    const items = signal<Item[]>([
+      { id: 1, text: "one" },
+      { id: 2, text: "two" },
+    ]);
+
+    const node = ul(
+      each(
+        () => items.value,
+        (item, index) => li(() => `${index.value}:${item.value.text}`),
+        { key: (i) => i.id },
+      ),
+    );
+    dispose = mount(node, container);
+    const lisBefore = container.firstElementChild!.querySelectorAll("li");
+    expect(lisBefore[0].textContent).toBe("0:one");
+    expect(lisBefore[1].textContent).toBe("1:two");
+
+    items.value = [
+      { id: 2, text: "two" },
+      { id: 1, text: "one" },
+    ];
+    const lisAfter = container.firstElementChild!.querySelectorAll("li");
+    expect(lisAfter[0].textContent).toBe("0:two");
+    expect(lisAfter[1].textContent).toBe("1:one");
+  });
+
+  it("hybrid accessor satisfies the `() => T` shape for bindField-style helpers", () => {
+    // The hybrid accessor must be assignable to `() => T` so helpers like
+    // bindField (which expect that shape) continue to work unchanged.
+    const items = signal<Item[]>([{ id: 1, text: "a" }]);
+    const readText = (accessor: () => Item) => accessor().text;
+    let capturedViaCallShape: string | undefined;
+
+    const node = ul(
+      each(
+        () => items.value,
+        (item) => {
+          capturedViaCallShape = readText(item);
+          return li(item.value.text);
+        },
+        { key: (i) => i.id },
+      ),
+    );
+    dispose = mount(node, container);
+    expect(capturedViaCallShape).toBe("a");
+  });
+});
