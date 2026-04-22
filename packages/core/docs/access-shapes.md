@@ -6,25 +6,23 @@ Canonical reference for **how you read** reactive values. Paired with [`reactive
 
 ## Is "uniform `() => value`" actually uniform?
 
-The marketing line you'll see on whisq.dev is _"wrap reactive reads in `() => ...` everywhere."_ The **wrapper** is uniform — every reactive position in the API accepts `() => value`. What varies is **what goes inside the wrapper**, because Whisq exposes three different source shapes: plain signals, keyed-`each` accessors, and `resource()` fields.
+The marketing line you'll see on whisq.dev is _"wrap reactive reads in `() => ...` everywhere."_ The **wrapper** is uniform — every reactive position in the API accepts `() => value`. Since WHISQ-96 shipped the **hybrid accessor**, signals and keyed-`each` items now read with the *same* `.value` shape, so the simple rule is:
 
-So the rule to remember is:
+> _Wrap reactive reads in `() => ...` and read `.value` on the source. `resource()` fields are the single exception — they're callable (`users.loading()`, `users.data()`) because loading / error / data are semantic states, not signals._
 
-> _Wrap reactive reads in `() => ...`. Unwrap the source:_
-> _- Signal → `.value`_
-> _- Keyed-`each` item or `resource()` field → `()` (it's already an accessor)._
-
-Two tokens to remember instead of one, but one consistent wrapper — and _zero_ hidden dependency arrays, stale closures, or re-render caveats.
+The old "call the keyed-`each` accessor with `()`" form still works for backwards compatibility and for handing the accessor to `bindField`-style helpers that type their input as `() => T`.
 
 ---
 
 ## The three shapes at a glance
 
-| # | Source                    | Outside reactive context              | Inside reactive context (getter) |
-| - | ------------------------- | ------------------------------------- | -------------------------------- |
-| 1 | Plain signal              | `sig.value` / `sig.peek()`            | `() => sig.value`                |
-| 2 | Keyed `each()` item       | _(only exists inside the render fn)_  | `() => todo().text`              |
-| 3 | `resource()` field        | `users.loading()` / `users.data()` …  | `() => users.loading()`          |
+| # | Source                    | Outside reactive context              | Inside reactive context (getter)      |
+| - | ------------------------- | ------------------------------------- | ------------------------------------- |
+| 1 | Plain signal              | `sig.value` / `sig.peek()`            | `() => sig.value`                     |
+| 2 | Keyed `each()` item       | _(only exists inside the render fn)_  | `() => todo.value.text` (canonical)   |
+| 3 | `resource()` field        | `users.loading()` / `users.data()` …  | `() => users.loading()`               |
+
+Shape 2 also accepts the legacy call form — `() => todo().text` — which remains the shape `bindField(source, todo, "done")` expects when the accessor is passed as a `() => T` argument.
 
 ---
 
@@ -51,9 +49,9 @@ const snap = count.peek();
 - **Common mistake:** passing `count.value` directly as a child → reads once, not reactive.
 - **Writes:** `count.value = n` or `count.set(n)` or `count.update(fn)`.
 
-## Shape 2 — Keyed `each()` item: `todo()`
+## Shape 2 — Keyed `each()` item: `todo.value` (or `todo()` for legacy consumers)
 
-Inside a keyed `each(items, (item) => …, { key })`, the `item` argument is an **accessor function** — you call it with `()` to get the current value. Wrapping the read in `() => todo().text` is what makes the child re-render when the array is replaced with new objects at the same key. Closing over `todo` and writing `.text` would be stale at the next array replacement (see WHISQ-62 for the fix that introduced this).
+Inside a keyed `each(items, (item) => …, { key })`, the `item` argument is a **hybrid accessor** — both callable (`todo()`) and signal-shaped (`todo.value`, `todo.peek()`). Prefer `todo.value.<field>` inside reactive getters to join the uniform `() => sig.value` rule from Shape 1. The `todo()` call form stays because it's what `bindField(source, todo, "done")` and other `() => T` consumers take as input. Wrapping the read in `() => todo.value.text` is what makes the child re-render when the array is replaced with new objects at the same key — closing over `todo.value` at setup (without the wrapper) snapshots the first value and freezes the row at the next array replacement (see WHISQ-62 for the original stale-read fix, WHISQ-96 for the `.value` shape).
 
 ```ts
 type Todo = { id: string; text: string; done: boolean };
@@ -64,17 +62,22 @@ ul(
     () => todos.value,
     (todo) =>
       li(
-        span(() => todo().text),                      // reactive text via accessor
-        input({ type: "checkbox",
-          ...bindField(todos, todo, "done", { as: "checkbox" }) }),
+        span(() => todo.value.text),                  // canonical — joins Shape 1
+        input({
+          type: "checkbox",
+          // bindField takes `() => T`; the hybrid accessor is assignable to that
+          ...bindField(todos, todo, "done", { as: "checkbox" }),
+        }),
       ),
     { key: (t) => t.id },
   ),
 );
 ```
 
-- **`todo` is a function, not an object** — `todo.text` is `undefined`; TypeScript flags this.
-- **Always wrap `todo()` in `() => ...`** for reactive reads — a bare `todo()` outside a getter is a one-shot snapshot.
+- **`todo.value.<field>`** is the canonical read — uniform with plain signals.
+- **`todo()` still works** and is structurally `() => T`, so `bindField` and every other `() => T` consumer accepts the accessor unchanged.
+- **Wrap reads in `() => ...`** for reactive positions — a bare `todo.value.text` at setup is a one-shot snapshot, same as reading a signal's `.value` without the wrapper.
+- **`todo.peek()`** reads the current value without tracking — mirrors `signal.peek()`.
 - **Writes** go through the source signal, not the accessor. Use `bindField(source, item, key)` for the common "update field on an item" case; fall back to a manual event pair for arbitrary mutations.
 
 Non-keyed `each(items, (item) => …)` (no `{ key }`) still passes plain `T`, because the whole list re-renders on every change — no stale-accessor risk. See [`reactive-shapes.md`](./reactive-shapes.md) for when to reach for `each` keyed vs. non-keyed.
@@ -115,6 +118,8 @@ The common rule: **the thing you hand to the child must be re-readable**. A raw 
 
 ### Worked example: split a todo row into its own component
 
+The child has two reasonable prop-type choices — pick by whether it needs access to the `.value` / `.peek()` API or just wants the narrowest `() => T` capability that accepts any source.
+
 ```ts
 // parent: owns the todos signal
 type Todo = { id: string; text: string; done: boolean };
@@ -133,30 +138,41 @@ function TodoList() {
   );
 }
 
-// child: reads props.todo() inside its own getters
-const TodoItem = component((props: { todo: () => Todo }) => {
+// child: typed as ItemAccessor<Todo> — reads via .value (canonical Shape 2)
+import type { ItemAccessor } from "@whisq/core";
+
+const TodoItem = component((props: { todo: ItemAccessor<Todo> }) => {
   return li(
     input({
       type: "checkbox",
+      // bindField wants `() => T`; the hybrid accessor is assignable to that
       ...bindField(todos, props.todo, "done", { as: "checkbox" }),
     }),
-    span(() => props.todo().text),              // re-reads on every source change
+    span(() => props.todo.value.text),             // canonical — joins Shape 1
     button(
-      { onclick: () => remove(props.todo().id) },
+      { onclick: () => remove(props.todo.value.id) },
       "✕",
     ),
   );
 });
+
+// Alternative: typed as `() => Todo` — the narrowest shape, accepts any
+// getter-style source (keyed-each accessor, resource fields, `() => sig.value`).
+// Read inside the child with `props.todo()` — same freshness, fewer capabilities.
+const TodoItemCompat = component((props: { todo: () => Todo }) => {
+  return li(span(() => props.todo().text));
+});
 ```
 
-Everything the child needs is reachable from `props.todo()`. Nothing is captured in a local variable at setup. When the parent replaces `todos.value` with a new array that still contains the same `id`, the reconciler reuses this `TodoItem` instance; the per-entry `itemSig` gets the new object; `props.todo()` returns that new object; every getter in the child re-reads.
+Everything the child needs is reachable from `props.todo`. Nothing is captured in a local variable at setup. When the parent replaces `todos.value` with a new array that still contains the same `id`, the reconciler reuses this `TodoItem` instance; the per-entry `itemSig` gets the new object; both `props.todo.value` and `props.todo()` return that new object; every getter in the child re-reads.
 
 ### Counter-example: snapshot at setup (the bug you can't reproduce in a unit test)
 
 ```ts
 // DON'T DO THIS
-const TodoItem = component((props: { todo: () => Todo }) => {
-  const todo = props.todo();                    // snapshot captured once
+const TodoItem = component((props: { todo: ItemAccessor<Todo> }) => {
+  const todo = props.todo.value;                // snapshot captured once
+  // Or the legacy equivalent: `const todo = props.todo()` — same bug.
   return li(
     span(todo.text),                            // static — never updates
     button(
@@ -183,20 +199,21 @@ Both shapes work; pick by who "owns" the binding.
 | --------------------- | ----------------------------------- | ---------------------- |
 | A `Signal<T>`          | `{ count: sig }` (the signal itself) | `() => props.count.value` |
 | A `Signal<T>` — child should only read  | `{ count: () => sig.value }` (pre-wrapped getter) | `() => props.count()` |
-| A keyed-`each` item    | `{ todo }` (the accessor)            | `() => props.todo()`   |
+| A keyed-`each` item    | `{ todo }` (the hybrid accessor)     | `() => props.todo.value.x` or `() => props.todo().x` |
 | A `resource()` field   | `{ data: users.data }` (the accessor) | `() => props.data()`   |
 
 - Pass the raw signal when the child might need to **write** (`bind(props.sig)`). The signal object carries both read and write.
 - Pass a pre-wrapped getter `() => sig.value` when the child should **only read** — the type `() => T` is the smallest capability and is identical-shaped to the keyed-each/resource case, so generic child components can accept any of them.
-- **Never call the accessor at the parent** — `TodoItem({ todo: todo() })` snapshots it.
+- **Never call the accessor at the parent** — `TodoItem({ todo: todo() })` or `TodoItem({ todo: todo.value })` both snapshot and freeze the child.
 
 ### Common mistakes at the boundary
 
 | Mistake                                         | What happens                                                      | Fix                                             |
 | ----------------------------------------------- | ----------------------------------------------------------------- | ----------------------------------------------- |
 | `TodoItem({ todo: todo() })` (call at parent)   | Child receives frozen item; stale after array replacement.       | `TodoItem({ todo })` — pass the accessor.       |
-| `const todo = props.todo()` inside child setup   | Snapshots at first mount; ignores later updates.                 | Read inside each getter: `() => props.todo().x`. |
-| Destructuring props in setup (`const { todo } = props`) | Loses per-render re-read if Whisq ever swaps props (and is a footgun elsewhere too). | Read fields off `props` directly: `() => props.todo().text`. |
+| `TodoItem({ todo: todo.value })` (`.value` at parent) | Same bug in a different dress — reads the current value and snapshots it. | `TodoItem({ todo })` — pass the accessor. |
+| `const todo = props.todo.value` inside child setup | Snapshots at first mount; ignores later updates.               | Read inside each getter: `() => props.todo.value.x`. |
+| Destructuring props in setup (`const { todo } = props`) | Loses per-render re-read if Whisq ever swaps props (and is a footgun elsewhere too). | Read fields off `props` directly: `() => props.todo.value.text`. |
 | Passing `todos.value[0]` as a prop              | Same as snapshotting — you read `.value` at the parent.          | Pass a getter: `{ first: () => todos.value[0] }`. |
 
 See also the structural guards shipped in [#81](https://github.com/whisqjs/whisq/issues/81) — `WhisqStructureError` catches wrong-shaped children at the boundary and points at the fix.

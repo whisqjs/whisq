@@ -15,7 +15,7 @@ Every reactive position in the API accepts `() => value` — that wrapper is uni
 | 3 | **`bind()`** spread       | `input({ ...bind(email) })`                                                        | Two-way binding one signal into one form input you own                                  |
 | 4 | **`bindField()`** spread  | `input({ type: "checkbox", ...bindField(todos, todo, "done", { as: "checkbox" }) })` | A field inside an item inside a signal-backed array (inside keyed `each`)               |
 
-Escape hatch: when `bindField()` doesn't fit (deep paths, custom write logic), fall back to a **manual event pair** — `{ checked: () => todo().done, onchange: e => toggle(todo().id) }`. Same idea, more code.
+Escape hatch: when `bindField()` doesn't fit (deep paths, custom write logic), fall back to a **manual event pair** — `{ checked: () => todo.value.done, onchange: e => toggle(todo.value.id) }`. Same idea, more code.
 
 A one-sentence decision flow:
 
@@ -97,14 +97,14 @@ ul(
           type: "checkbox",
           ...bindField(todos, todo, "done", { as: "checkbox" }),
         }),
-        span(() => todo().text),
+        span(() => todo.value.text),
       ),
     { key: (t) => t.id },
   ),
 );
 ```
 
-- **`todo` is an accessor** (post WHISQ-62) — call it as `todo()` to read the current item. `bindField()` reads it internally to find the target item at write time.
+- **`todo` is a hybrid accessor** (post WHISQ-96) — read it as `todo.value.<field>` inside getters (canonical, matches the `() => sig.value` rule for plain signals) or as `todo()` when handing it to `() => T` consumers like `bindField()`. Both return the same live item.
 - **`keyBy` defaults to `t => t.id`** — supply `{ keyBy: (t) => t.uuid }` for items keyed on something else.
 - **Writes produce a new array** — `source.value` is replaced with an immutably-updated copy, so downstream `computed` / `effect` / keyed `each()` re-run correctly.
 
@@ -125,8 +125,8 @@ When none of the helpers fit — deep nested paths that cross arrays, writes tha
 ```ts
 input({
   type: "checkbox",
-  checked: () => todo().done,                      // reactive read via accessor
-  onchange: () => toggle(todo().id),               // writer — reads latest id
+  checked: () => todo.value.done,                  // reactive read via accessor
+  onchange: () => toggle(todo.value.id),           // writer — reads latest id
 }),
 ```
 
@@ -141,7 +141,7 @@ The manual pair is strictly more powerful but also strictly more verbose. Prefer
 | `span(count.value)`                                                           | Reads once at render. Not reactive.                                                   | `span(() => count.value)`                           |
 | `div({ class: active.value ? "on" : "off" })`                                 | Evaluated once.                                                                       | `div({ class: () => active.value ? "on" : "off" })` |
 | `input({ value: email.value, oninput: e => email.value = e.target.value })`   | Works but verbose; risks forgetting both sides.                                       | `input({ ...bind(email) })`                         |
-| `each(..., (todo) => li(() => todo.done ? ...))` (closes over a stale `todo`) | `todo` is the accessor — `.done` on a function is `undefined`. TypeScript flags this. | `li(() => todo().done ? ...)`                       |
+| `each(..., (todo) => li(() => todo.done ? ...))` (reads `.done` directly on the accessor) | `todo` is a hybrid accessor — `.done` on the function itself is `undefined`. TypeScript flags this. | `li(() => todo.value.done ? ...)` (canonical) or `li(() => todo().done ? ...)` (legacy call form). |
 | `items.value.push(x)`                                                         | In-place mutation doesn't notify.                                                     | `items.value = [...items.value, x]`                 |
 | `bind(todo, { as: "checkbox" })` inside keyed `each`                          | `todo` is an accessor, not a signal with `.value`.                                    | `bindField(source, todo, "done", { as: "checkbox" })` (shape 4). |
 

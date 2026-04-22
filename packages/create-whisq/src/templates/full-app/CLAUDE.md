@@ -81,38 +81,44 @@ Four shapes cover every reactive position. The one-line decision flow: *"single 
 | `bind()` spread  | `input({ ...bind(email) })`                                        | Two-way binding one signal into one form input       |
 | `bindField()` spread | `input({ type: "checkbox", ...bindField(todos, todo, "done", { as: "checkbox" }) })` | Field inside an item inside a keyed `each`           |
 
-Inside a keyed `each(..., { key })`, the callback’s `item` is an **accessor function** — call it (`todo()`) to read the current item. Getters that close over `todo` directly go stale when the array is replaced.
+Inside a keyed `each(..., { key })`, the callback's `item` is a **hybrid accessor** — read it as `todo.value.<field>` inside getters (canonical, matches the `() => sig.value` rule for signals) or as `todo()` when handing it to `() => T` consumers like `bindField`. Both return the current item; getters that close over `todo` without unwrapping via `.value` or `()` go stale when the array is replaced.
 
 #### Three ways to read inside a getter
 
 The `() => …` wrapper is uniform; what goes **inside** it depends on the source.
 
-| Source              | Read inside getter       |
-| ------------------- | ------------------------ |
-| Plain signal        | `() => sig.value`      |
-| Keyed `each` item | `() => todo().text`    |
-| `resource()` field | `() => users.loading()` |
+| Source              | Read inside getter              |
+| ------------------- | ------------------------------- |
+| Plain signal        | `() => sig.value`               |
+| Keyed `each` item   | `() => todo.value.text` (canonical — matches signals) |
+| `resource()` field  | `() => users.loading()`         |
 
-Signals use `.value`; accessors (keyed-each items, resource fields) are already callable — wrap them in `() =>` for reactivity. Full canonical reference: [`packages/core/docs/access-shapes.md`](https://github.com/whisqjs/whisq/blob/develop/packages/core/docs/access-shapes.md).
+Signals and keyed-`each` items both read via `.value`; `resource()` fields are callable (`users.loading()`, `users.data()`) because loading / error / data are semantic states. Full canonical reference: [`packages/core/docs/access-shapes.md`](https://github.com/whisqjs/whisq/blob/develop/packages/core/docs/access-shapes.md).
 
 #### Accessors across component boundaries
 
 When you split a child component that needs a reactive item, **pass the accessor — don't call it at the parent**:
 
 ```ts
+import type { ItemAccessor } from "@whisq/core";
+
 // parent
 each(() => todos.value, (todo) => TodoItem({ todo }), { key: t => t.id })
 
 // child — read inside each getter, never destructure props or snapshot at setup
-const TodoItem = component((props: { todo: () => Todo }) => {
+const TodoItem = component((props: { todo: ItemAccessor<Todo> }) => {
   return li(
-    span(() => props.todo().text),                  // re-reads on every source change
-    button({ onclick: () => remove(props.todo().id) }, "✕"),
+    span(() => props.todo.value.text),                 // canonical — matches Shape 1
+    button({ onclick: () => remove(props.todo.value.id) }, "✕"),
   );
 });
+
+// Legacy shape — type the prop as `() => Todo` if the child should accept
+// any `() => T` source (keyed-each accessors, pre-wrapped signal readers,
+// resource fields). Read with `props.todo()`.
 ```
 
-Snapshotting (`const todo = props.todo()` at setup) makes the row freeze at mount — no error, just silent staleness after the next array change. The [access-shapes.md](https://github.com/whisqjs/whisq/blob/develop/packages/core/docs/access-shapes.md) doc covers the full mistake table and the prop-shape variants (pass a signal when the child needs to write; pass a getter when it only reads).
+Snapshotting (`const todo = props.todo.value` or `const todo = props.todo()` at setup) makes the row freeze at mount — no error, just silent staleness after the next array change. The [access-shapes.md](https://github.com/whisqjs/whisq/blob/develop/packages/core/docs/access-shapes.md) doc covers the full mistake table and the prop-shape variants (pass a signal when the child needs to write; pass a getter when it only reads).
 
 ### Events
 
@@ -171,23 +177,24 @@ ul(
 )
 
 // 2. Keyed — DOM nodes are reused for matching keys. The render callback
-//    receives ACCESSORS, not snapshots, so field reads inside reactive
-//    getters see fresh values when the source array is replaced:
+//    receives HYBRID ACCESSORS that are both signal-shaped (.value/.peek())
+//    and callable, so field reads inside reactive getters see fresh values
+//    when the source array is replaced:
 ul(
   each(
     () => todos.value,
     (todo) =>
       li(
-        { class: () => todo().done ? "done" : "" },  // getter reads accessor
-        span(() => todo().text),                      // getter reads accessor
-        button({ onclick: () => remove(todo().id) }, "✕"),
+        { class: () => todo.value.done ? "done" : "" },    // signal-shape — canonical
+        span(() => todo.value.text),                        // signal-shape
+        button({ onclick: () => remove(todo.value.id) }, "✕"),
       ),
     { key: (t) => t.id },
   ),
 )
 ```
 
-When you pass `{ key }`, the callback’s `item` / `index` are **accessor functions** — call them (`todo()`, `index()`) to read the current value. Wrap them in `() =>` for reactive children/props so they re-read when the source array changes.
+When you pass `{ key }`, the callback's `item` / `index` are **hybrid accessors**. Prefer `todo.value.<field>` inside reactive getters — it joins the uniform `() => sig.value` rule. The call form `todo()` (and `index()`) still works for legacy code and for helpers like `bindField` that type their argument as `() => T`.
 
 Inline `.map()` also works for simple cases:
 
