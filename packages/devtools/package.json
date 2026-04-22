@@ -1,6 +1,6 @@
 {
   "name": "@whisq/devtools",
-  "version": "0.1.0-alpha.7",
+  "version": "0.1.0-alpha.8",
   "description": "DevTools runtime hook for Whisq — signal inspection, component tree, effect tracking",
   "type": "module",
   "main": "./dist/index.js",

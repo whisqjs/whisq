@@ -1,5 +1,130 @@
 # @whisq/core
 
+## 0.1.0-alpha.8
+
+### Minor Changes
+
+- 8f645a8: The `class:` prop on every element now accepts an **array of sources** with per-source reactivity. Strings are class names; falsy values (`false | null | undefined | 0 | ""`) are filtered out — enabling the `cond && "active"` shorthand inline; functions are reactive — each function is called during the render effect and re-reads when its tracked signals change.
+
+  ```ts
+  div({
+    class: [
+      "btn",
+      () => `btn-${variant.value}`, // reactive
+      loading.value && "btn-loading", // static conditional — cond && "…"
+      () => isDisabled.value && "disabled", // reactive conditional
+    ],
+  });
+  ```
+
+  If any array element is a function, the array is applied reactively; otherwise it's applied once at mount. This removes the `cx` vs `rcx` migration footgun Claude's alpha.7 feedback flagged — you no longer have to remember which helper to import when a class prop grows a reactive branch mid-edit.
+
+  `cx` and `rcx` continue to work unchanged — this is a pure addition. A future release may collapse them into a single composition helper (see WHISQ-97 option A) but that change is deferred.
+
+  Closes WHISQ-97 option B. Options A (unified `cx`) and the `rcx` deprecation path remain open on the issue for a follow-up cycle.
+
+- 401bfca: `bindField` now throws a `WhisqKeyByError` on no-match writes in dev mode (default `process.env.NODE_ENV !== "production"`) instead of silently logging to the console. A stale accessor or broken `keyBy` now surfaces immediately at the first click in `vite dev` instead of drowning in the console.
+
+  New option `strict?: boolean` lets callers pin the behaviour explicitly — `strict: true` throws in both envs; `strict: false` keeps the legacy warn-and-discard even in dev. Production behaviour is unchanged (warn-and-discard) unless `strict: true` is set.
+
+  ```ts
+  // Default in vite dev: throws WhisqKeyByError
+  input({ ...bindField(todos, todo, "done", { as: "checkbox" }) });
+
+  // Opt out if a test deliberately exercises the no-match path:
+  input({
+    ...bindField(todos, todo, "done", { as: "checkbox", strict: false }),
+  });
+  ```
+
+  `WhisqKeyByError` carries `sourceKeys`, `targetKey`, and `field` so the error tells you what was in the source at write time vs. what the accessor was looking for. Both the error class and its `WhisqKeyByErrorFields` type are exported from `@whisq/core`.
+
+  Closes WHISQ-100.
+
+- 0c1dccf: Fix `component()` and `sheet()` type signatures so that apps scaffolded from `create-whisq@latest` type-check cleanly under `tsc --strict`.
+
+  Previously, `component()` was typed as `(props) => WhisqTemplate` — a legacy template-literal shape (`{ fragment, bindings, dispose }`) — while every element function (`div`, `span`, etc.) returns `WhisqNode` (`{ el, disposers, dispose, __whisq }`). The two shapes were incompatible, so **every** hyperscript component setup failed `tsc --strict` with _"Type 'WhisqNode' is missing properties: fragment, bindings"_. The runtime check in `component.ts` already required `WhisqNode`-shaped output, so the types were wrong for the documented and actually-supported API.
+
+  Changes:
+  - **`component<P>(setup: (props: P) => WhisqNode): ComponentDef<P>`** — setup now returns `WhisqNode`, matching the runtime guard and the hyperscript API that the LLM reference, docs, and starter templates all use. The JSDoc example switches from the legacy `html\`...\`` form to the hyperscript form.
+  - **`ComponentDef<P>` call signature** — returns `WhisqNode` so components compose inside elements (`div(MyComponent({}))` now type-checks).
+  - **`sheet()` nested selectors** — `StyleRule` is now recursive (`{ [key: string]: StyleValue | StyleRule }`), so mixing base CSS properties and nested rules (`"&:hover": { … }`, `"& a": { "&:hover": { … } }`, `"@media (…)": { … }`) under the same top-level key type-checks. The runtime behaviour is unchanged — the prefix convention is still the source of truth for which keys are nested vs base.
+
+  Breaking: if any code relied on the old `(props) => WhisqTemplate` signature (the tagged-template `html\`...\``path was already rejected by`component()`'s runtime check, so it couldn't actually have been in production use), it needs to return a `WhisqNode` instead.
+
+  Closes WHISQ-108. The `html` tagged-template API and `WhisqTemplate` type remain in `@whisq/core/template` for internal use; fully removing them is tracked as a follow-up to #108.
+
+- 91740a2: Keyed `each()`'s render callback now receives a **hybrid accessor** — callable (`todo()`) **and** signal-shaped (`todo.value`, `todo.peek()`). Joins the uniform `() => sig.value` reactive-access rule that holds everywhere else in the API; closes the last pocket of divergence both reviewers flagged in alpha.7 feedback.
+
+  ```ts
+  each(
+    () => todos.value,
+    (todo) =>
+      li(
+        { class: () => (todo.value.done ? "done" : "") }, // new canonical shape
+        span(() => todo.value.text),
+        button({ onclick: () => remove(todo.value.id) }, "✕"),
+      ),
+    { key: (t) => t.id },
+  );
+  ```
+
+  **Non-breaking.** The accessor is still a plain function at call sites that want `todo()`, and structurally assignable to `() => T` — so `bindField(todos, todo, "done", { as: "checkbox" })` and every other helper that types its input as `() => T` works unchanged. Existing call sites do not need to migrate; new code should prefer `todo.value.<field>` for consistency with the rest of the reactive-access rule.
+
+  `index` follows the same pattern — `index()` (legacy) and `index.value` / `index.peek()` (new) both work.
+
+  New exported type: `ItemAccessor<T>` (from `@whisq/core`).
+
+  Addresses WHISQ-96 with the hybrid approach — option A's `.value` shape without the breaking-change downside. Partially closes the issue; the docs-side cookbook in `whisq.dev#108` (D-1) should adopt the `.value` shape as the canonical example going forward.
+
+- 2809555: Two opt-in utility helpers, both on sub-path imports so apps that don't use them pay no bundle cost.
+  - **`partition(source, predicate)`** from `@whisq/core/collections` — split a signal-held array into two `ReadonlySignal<T[]>` sides (matching / not-matching). Source order is preserved on both sides; each side is an independent `computed()` that only re-runs effects subscribed to it. The canonical use is "active" vs "done" on a todo list without hand-rolling two `computed`s.
+
+    ```ts
+    import { partition } from "@whisq/core/collections";
+
+    const todos = signal<Todo[]>([...]);
+    const [pending, done] = partition(() => todos.value, (t) => !t.done);
+    button({ onclick: () => (todos.value = pending.value) }, "Clear completed");
+    ```
+
+  - **`randomId()`** from `@whisq/core/ids` — UUID-v4-shaped random identifier. Uses native `crypto.randomUUID()` when available (all modern browsers, Node 19+, Deno, Bun); falls back to a `Math.random`-based synthesis with the same v4 shape for older targets (old Safari, pre-19 Node). Same output shape on both paths, so callers don't have to branch. Suitable for UI row ids and keyed-`each` keys — **not** for security tokens (the fallback is not cryptographically strong).
+
+    ```ts
+    import { randomId } from "@whisq/core/ids";
+
+    const newTodo = { id: randomId(), text, done: false };
+    ```
+
+  Top-level `@whisq/core` bundle stays at 5.5 KB gzipped. Closes WHISQ-101.
+
+- 1b669b4: Add `onSchemaFailure?: (err: unknown, raw: string) => void` option to `persistedSignal`. Invoked synchronously **before** fallback to `initial` when `deserialize` throws (malformed stored JSON) or `schema` throws (validator rejects). Receives the thrown error and the exact raw string read from storage — use it to log to Sentry / show a recovery UI / decide between migrate-vs-reset.
+
+  ```ts
+  const todos = persistedSignal<Todo[]>("todos", [], {
+    schema: validateTodosShape,
+    onSchemaFailure: (err, raw) => {
+      Sentry.captureException(err, { extra: { key: "todos", raw } });
+    },
+  });
+  ```
+
+  The callback is **not** invoked on first-visit (`raw` would be `null`, not a failure) or on storage-access errors (private mode, disabled storage — environment faults, not schema faults). If the callback itself throws, the exception is caught and logged via `console.warn` so a broken diagnostic pipeline can't prevent signal construction.
+
+  Closes WHISQ-98.
+
+### Patch Changes
+
+- 0afc98b: Fix `theme()` and `sheet()` throwing `ReferenceError: document is not defined` under SSR (server-side rendering). The shared internal `injectCSS()` helper now short-circuits when `typeof document === "undefined"`, matching the SSR-safe pattern that `persistedSignal` already uses.
+
+  User-observable impact:
+  - **`theme()`**: SSR call is a no-op (no `<style>` tag is written; client-side hydration takes over on mount). Previously threw.
+  - **`sheet()`**: SSR call returns the in-memory classMap (so server-rendered HTML can reference the correct class names for the client to hydrate against), but skips the DOM injection step. Previously threw on the injection line.
+
+  Also clarified `theme()` JSDoc: **"call once at module scope"** and **"duplicate calls = last-call-wins"** are now explicit (the duplicate-calls behavior already held; the docs didn't say so).
+
+  Closes WHISQ-99 (framework side). Docs work on whisq.dev — the `/core-concepts/styling/` and `/api/theme/` pages — will land as a companion PR in that repo.
+
 ## 0.1.0-alpha.7
 
 ### Minor Changes
