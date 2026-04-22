@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { signal } from "../reactive.js";
 import { input, mount, each, ul } from "../elements.js";
 import { bindField } from "../bindField.js";
+import { WhisqKeyByError } from "../dev-errors.js";
 
 interface Todo {
   id: string;
@@ -298,7 +299,7 @@ describe("bindField() — keyBy", () => {
     expect(rows.value[0].done).toBe(true);
   });
 
-  it("warns and discards the write when no item matches", () => {
+  it("warns and discards the write when no item matches (strict: false)", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const todos = signal<Todo[]>([
       { id: "a", text: "x", done: false, priority: 0 },
@@ -307,6 +308,7 @@ describe("bindField() — keyBy", () => {
     const accessor = () => todos.value[0] ?? { id: "missing" };
     const props = bindField(todos, accessor as () => Todo, "done", {
       as: "checkbox",
+      strict: false, // opt out of the dev-strict default that would throw
     });
     todos.value = []; // item gone
     (props as { onchange: (e: Event) => void }).onchange({
@@ -336,5 +338,121 @@ describe("bindField() — input validation", () => {
     expect(() =>
       bindField(todos, "not a function" as unknown as () => Todo, "done"),
     ).toThrow(TypeError);
+  });
+});
+
+// ── Dev-strict mode (WHISQ-100) ────────────────────────────────────────────
+//
+// Dev mode (NODE_ENV !== "production") throws WhisqKeyByError on a no-match
+// write so a stale accessor or broken keyBy surfaces in the dev loop instead
+// of hiding in the console. Production degrades to warn-and-discard unless
+// the caller opts in via `strict: true`. These tests cover every cell of
+// the env × strict truth table plus the error's field shape.
+
+describe("bindField() — dev-strict no-match writes", () => {
+  function makeStaleWrite(strict?: boolean) {
+    const todos = signal<Todo[]>([
+      { id: "a", text: "x", done: false, priority: 0 },
+    ]);
+    const accessor = () => todos.value[0] ?? { id: "missing" };
+    const options: { as: "checkbox"; strict?: boolean } = { as: "checkbox" };
+    if (strict !== undefined) options.strict = strict;
+    const props = bindField(todos, accessor as () => Todo, "done", options);
+    todos.value = []; // stale accessor now points at an id not in source
+    return {
+      todos,
+      fire: () =>
+        (props as { onchange: (e: Event) => void }).onchange({
+          target: { checked: true } as HTMLInputElement,
+        } as unknown as Event),
+    };
+  }
+
+  it("throws WhisqKeyByError in dev by default (strict omitted)", () => {
+    // Vitest runs with NODE_ENV === "test", which is !== "production",
+    // so dev-strict is the default here.
+    const { fire } = makeStaleWrite();
+    expect(fire).toThrow(WhisqKeyByError);
+  });
+
+  it("error carries sourceKeys, targetKey, and field fields", () => {
+    const { fire } = makeStaleWrite();
+    try {
+      fire();
+      expect.fail("expected WhisqKeyByError");
+    } catch (err) {
+      expect(err).toBeInstanceOf(WhisqKeyByError);
+      const keyErr = err as WhisqKeyByError;
+      expect(keyErr.sourceKeys).toEqual([]); // source was emptied before the write
+      expect(keyErr.targetKey).toBe("missing");
+      expect(keyErr.field).toBe("done");
+      expect(keyErr.name).toBe("WhisqKeyByError");
+      expect(keyErr.message).toContain("no item in source matched");
+    }
+  });
+
+  it("throws when strict: true is explicitly set (overrides env default)", () => {
+    // Simulate production env; explicit strict:true wins.
+    const originalEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = "production";
+    try {
+      const { fire } = makeStaleWrite(true);
+      expect(fire).toThrow(WhisqKeyByError);
+    } finally {
+      process.env.NODE_ENV = originalEnv;
+    }
+  });
+
+  it("warns (does not throw) when strict: false is explicitly set in dev", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const { fire, todos } = makeStaleWrite(false);
+      expect(fire).not.toThrow();
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining("no item in source matched"),
+      );
+      expect(todos.value).toEqual([]); // write was discarded
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("warns (does not throw) in production by default", () => {
+    const originalEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = "production";
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const { fire, todos } = makeStaleWrite();
+      expect(fire).not.toThrow();
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining("no item in source matched"),
+      );
+      expect(todos.value).toEqual([]);
+    } finally {
+      warn.mockRestore();
+      process.env.NODE_ENV = originalEnv;
+    }
+  });
+
+  it("happy path unaffected — successful matching writes never throw or warn in dev-strict", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const todos = signal<Todo[]>([
+        { id: "a", text: "first", done: false, priority: 0 },
+      ]);
+      const accessor = () => todos.value[0]!;
+      const props = bindField(todos, accessor as () => Todo, "done", {
+        as: "checkbox",
+      });
+      expect(() =>
+        (props as { onchange: (e: Event) => void }).onchange({
+          target: { checked: true } as HTMLInputElement,
+        } as unknown as Event),
+      ).not.toThrow();
+      expect(todos.value[0].done).toBe(true);
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
   });
 });
