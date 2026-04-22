@@ -1,5 +1,119 @@
 # create-whisq
 
+## 0.1.0-alpha.7
+
+### Patch Changes
+
+- 35c30c1: Document the three reactive **access shapes** — signal `.value`, keyed-`each` item accessor `()`, `resource()` field `()` — honestly, without papering over the fact that the uniform-`() => value` claim describes the _wrapper_ but not what goes inside it. New canonical framework doc at [`packages/core/docs/access-shapes.md`](https://github.com/whisqjs/whisq/blob/develop/packages/core/docs/access-shapes.md).
+
+  Each scaffolded project's `CLAUDE.md` now carries a three-row table and a link to the canonical doc so AI coding assistants don't have to re-derive the rule from scratch on every prompt.
+
+  Collateral updates:
+  - `packages/core/docs/reactive-shapes.md` now cross-links to `access-shapes.md`, drops the "uniform framing undersells" opener (access-shapes.md owns that framing now), and updates shape #4 from "manual event pair" to `bindField()` (shipped in WHISQ-78) with the manual pair demoted to escape-hatch status.
+  - Repo README bullet tightened from "uniform `() => value` reactive pattern" to "one reactive wrapper" with a link to the three read shapes.
+
+  Closes #79. `@whisq/core` runtime unchanged — pure docs/positioning work.
+
+- b278f60: Document **accessors across component boundaries** — the silent-staleness bug that alpha.6 feedback called the single most uncertain moment in building a todo app.
+
+  [`packages/core/docs/access-shapes.md`](https://github.com/whisqjs/whisq/blob/develop/packages/core/docs/access-shapes.md) gains a full "Accessors across component boundaries" section with:
+  - A worked parent + child example where the child takes `{ todo: () => Todo }` and reads `props.todo()` inside getters.
+  - A counter-example showing the exact snapshot-at-setup pattern that silently breaks (row renders, never updates, stale `.id` after reorder).
+  - A variant table mapping parent source type (`Signal<T>`, keyed-`each` accessor, `resource()` field) to prop shapes and child read patterns.
+  - A mistakes table naming the four most common footguns (calling the accessor at the parent, snapshotting inside child setup, destructuring props, passing `.value[0]`).
+
+  All four scaffolded `CLAUDE.md` files gain the short version inline — parent + child skeleton + the "don't snapshot" rule — with a link to the canonical doc for depth.
+
+  Closes #80. Runtime-warning AC deferred to a P3 follow-up — static analysis (eslint / tsc) is a better fit than runtime instrumentation once real usage demands detection.
+
+- 757049d: Add `bindField(source, item, key, opts?)` — two-way binding for a field on an item inside a signal-held array. Closes the ergonomic gap `bind()` didn't reach: the most common UI shape in real applications (todos, carts, forms-with-rows, CRUD grids).
+
+  ```ts
+  each(
+    () => todos.value,
+    (todo) =>
+      input({
+        type: "checkbox",
+        ...bindField(todos, todo, "done", { as: "checkbox" }),
+      }),
+    { key: (t) => t.id },
+  );
+  ```
+
+  Mirrors `bind()`'s discriminator shapes (text / number / checkbox / radio). `keyBy` identifies which item to rewrite — defaults to `t => t.id`; override for items keyed on something else. Writes produce an immutable array update so downstream `computed` / `effect` re-run correctly.
+
+  All four scaffolded templates' `CLAUDE.md` reactive-shapes tables now lead with `bindField()` for this case instead of the manual event pair. The decision flow also updates to _"single signal you own → `bind()`; field inside an item inside a signal-held array → `bindField()`."_
+
+  `@whisq/core` size budget raised from 5 KB to 5.5 KB gzipped (current: 5.08 KB). The README updates "Under 5 KB gzipped" → "~5 KB gzipped" to match. `bindField` is exported from the top-level `@whisq/core` so LLMs and autocompletion discover it alongside `bind()`.
+
+  Closes #78.
+
+- 34a2c7a: Add `bindPath(source, path, opts?)` — two-way binding for a field at an arbitrary **object path** in a signal-held record. Use when `bind()` doesn't apply because the field lives two or more levels deep (e.g. `user.profile.email`, `settings.billing.plan`). Follow-up to WHISQ-78 (`bindField`) for the nested-object case the feedback docs flagged as friction against the flat-binding primitives.
+
+  Exported from a new sub-path, `@whisq/core/forms`, so apps that only need `bind()` + `bindField()` (the 80% case) pay no bundle cost. Top-level `@whisq/core` stays at 5.25 KB gzipped.
+
+  ```ts
+  import { bindPath } from "@whisq/core/forms";
+
+  form(
+    input({ ...bindPath(user, ["profile", "name"]) }),
+    input({ type: "email", ...bindPath(user, ["profile", "email"]) }),
+    input({
+      type: "number",
+      ...bindPath(user, ["profile", "age"], { as: "number" }),
+    }),
+    input({
+      type: "checkbox",
+      ...bindPath(user, ["prefs", "dark"], { as: "checkbox" }),
+    }),
+  );
+  ```
+
+  ### Behaviors worth leading with
+  - **Structural sharing on writes.** Writes produce a new root and new objects at every level on the path; sibling branches keep their reference identity so downstream `computed` / `effect` re-runs stay narrow.
+  - **Missing-intermediate creation.** Reading through a missing intermediate returns `undefined`; writing creates the object structure as needed.
+  - **Object keys only.** Array traversal is not supported in the path — use `bindField()` at the array level and compose. This keeps `bindPath` predictable and its implementation small.
+  - **Typed overloads** for depths 1–4; deeper paths work via the loose signature (same runtime, just less TS inference).
+
+  Mirrors `bind()` and `bindField()`'s discriminator shapes — text / number / checkbox / radio.
+
+  Scaffolded `CLAUDE.md` files gain a "Binding into nested records (opt-in, sub-path import)" block under Forms so AI-generated code for new projects discovers the pattern without reinventing it.
+
+  Closes #86.
+
+- 3a31d18: Clarify `match()` as a **predicate chain, not pattern matching**.
+
+  Audit finding: `match()` has always had exactly one shape — variadic tuple branches `[predicate, render]` with an optional trailing bare render fn as fallback. The GPT-side alpha.6 feedback flagged "object vs tuple form" confusion, but no object form exists in the code; GPT was pattern-matching against Rust/Scala/Vue conventions where `match(value, { case1, case2 })` is common.
+
+  Changes:
+  - **JSDoc** now leads with _"Predicate-chain conditional renderer — not pattern matching"_ and calls out the canonical shape, first-true-wins ordering, and fallback-position rules explicitly.
+  - **Dev-mode validation** (stripped in production builds) throws a `WhisqStructureError` when `match()` receives a plain object (the exact GPT-style confusion), a malformed tuple, or a fallback that isn't in the last position. Production bundle unchanged at 5.25 KB gzipped.
+  - **Scaffolded templates** — all four `CLAUDE.md` files now include `match` in the canonical imports line and expand the "Conditional Rendering" section to document `when()` vs `match()` with a ready example. AI-generated code for new projects will reach for `match` instead of nesting `when()`.
+
+  Closes #83.
+
+- c84e495: Add `persistedSignal(key, initial, opts?)` — a `Signal<T>` backed by `localStorage` / `sessionStorage`, exported from the new sub-path `@whisq/core/persistence` so apps that don't need it pay zero bundle cost.
+
+  ```ts
+  import { persistedSignal } from "@whisq/core/persistence";
+
+  export const todos = persistedSignal<Todo[]>("todos", []);
+  ```
+
+  Closes the "every Whisq app reinvents the guarded-localStorage-read-with-effect-writer pattern" problem identified by the alpha.6 feedback. Blessed shape, one import, no hand-rolling.
+
+  ### Behaviors worth leading with
+  - **SSR-safe.** On the server (`typeof window === "undefined"`) returns a plain signal initialized to `initial` with no storage subscription.
+  - **Schema-validated.** If the stored JSON is malformed, or an optional `schema(raw)` validator throws, the signal falls back to `initial` rather than crashing at mount.
+  - **Quota-safe.** If a write throws (`QuotaExceededError`, private mode), logs a warning and keeps the in-memory value — the app keeps working.
+  - **Module-scope intent.** Call `persistedSignal` at module scope in your `stores/` file, not inside components — the write effect lives for the module lifetime by design.
+
+  Options: `storage: "local" | "session"`, `serialize` / `deserialize` (default JSON), `schema` (validation on load).
+
+  Scaffolded templates' `CLAUDE.md` files gain a "Persisted stores (opt-in, sub-path import)" block under Shared State so AI-generated code for new projects can discover the pattern without reinventing it.
+
+  Closes #82.
+
 ## 0.1.0-alpha.6
 
 ### Minor Changes

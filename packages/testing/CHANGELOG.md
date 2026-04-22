@@ -1,5 +1,16 @@
 # @whisq/testing
 
+## 0.1.0-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [757049d]
+- Updated dependencies [34a2c7a]
+- Updated dependencies [97203c8]
+- Updated dependencies [3a31d18]
+- Updated dependencies [c84e495]
+  - @whisq/core@0.1.0-alpha.7
+
 ## 0.1.0-alpha.6
 
 ### Patch Changes
