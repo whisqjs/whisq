@@ -83,7 +83,13 @@ export {
   hr,
   iframe,
 } from "./elements.js";
-export type { WhisqNode, EventHandler, WhisqEvent } from "./elements.js";
+export type {
+  WhisqNode,
+  EventHandler,
+  WhisqEvent,
+  ClassArraySource,
+  ItemAccessor,
+} from "./elements.js";
 
 // Component model
 export {
@@ -113,8 +119,11 @@ export { sheet, styles, cx, rcx, sx, theme } from "./styling.js";
 export type { StyleObject } from "./elements.js";
 
 // Dev-mode diagnostics
-export { WhisqStructureError } from "./dev-errors.js";
-export type { WhisqStructureErrorFields } from "./dev-errors.js";
+export { WhisqStructureError, WhisqKeyByError } from "./dev-errors.js";
+export type {
+  WhisqStructureErrorFields,
+  WhisqKeyByErrorFields,
+} from "./dev-errors.js";
 
 // Forms
 export { bind } from "./bind.js";

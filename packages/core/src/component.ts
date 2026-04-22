@@ -5,7 +5,7 @@
 // ============================================================================
 
 import { signal, effect } from "./reactive.js";
-import type { WhisqTemplate } from "./template.js";
+import type { WhisqNode } from "./elements.js";
 import { WhisqStructureError, describeValue } from "./dev-errors.js";
 
 type CleanupFn = () => void;
@@ -41,15 +41,16 @@ interface ComponentContext {
 }
 
 export interface ComponentDef<P = {}> {
-  (props: P): WhisqTemplate;
+  (props: P): WhisqNode;
   __whisq_component: true;
 }
 
 // ── Component ───────────────────────────────────────────────────────────────
 
 /**
- * Define a component. Components are setup functions that return a template.
- * Props are a plain typed object. Lifecycle via onMount/onCleanup.
+ * Define a component. Components are setup functions that return an element
+ * (a `WhisqNode` — the value you get from calling `div(...)`, `span(...)`,
+ * etc.). Props are a plain typed object. Lifecycle via onMount/onCleanup.
  *
  * ```ts
  * const Counter = component((props: { initial?: number }) => {
@@ -58,17 +59,15 @@ export interface ComponentDef<P = {}> {
  *   onMount(() => console.log("mounted!"));
  *   onCleanup(() => console.log("cleaned up!"));
  *
- *   return html`
- *     <div>
- *       <span>${() => count.value}</span>
- *       <button @click="${() => count.value++}">+</button>
- *     </div>
- *   `;
+ *   return div(
+ *     span(() => count.value),
+ *     button({ onclick: () => count.value++ }, "+"),
+ *   );
  * });
  * ```
  */
 export function component<P extends Record<string, any> = {}>(
-  setup: (props: P) => WhisqTemplate,
+  setup: (props: P) => WhisqNode,
 ): ComponentDef<P> {
   const def = ((props: P) => {
     const parentCtx = contextStack[contextStack.length - 1] ?? null;
@@ -81,24 +80,24 @@ export function component<P extends Record<string, any> = {}>(
     };
 
     contextStack.push(ctx);
-    let template: WhisqTemplate;
+    let node: WhisqNode;
     try {
-      template = setup(props);
+      node = setup(props);
     } finally {
       contextStack.pop();
     }
 
     if (process.env.NODE_ENV !== "production") {
       if (
-        template == null ||
-        typeof template !== "object" ||
-        !("el" in template) ||
-        !("dispose" in template)
+        node == null ||
+        typeof node !== "object" ||
+        !("el" in node) ||
+        !("dispose" in node)
       ) {
         throw new WhisqStructureError({
           element: "component",
           expected: "setup to return a WhisqNode (an element call like `div(...)`)",
-          received: describeValue(template),
+          received: describeValue(node),
           hint: "Return the root element from your setup function: `return div(...)`. Bare strings, numbers, arrays, and null aren't valid component roots — wrap them in an element.",
         });
       }
@@ -110,8 +109,8 @@ export function component<P extends Record<string, any> = {}>(
     });
 
     // Wrap dispose to run cleanups
-    const originalDispose = template.dispose;
-    template.dispose = () => {
+    const originalDispose = node.dispose;
+    node.dispose = () => {
       ctx.disposed = true;
       for (const fn of ctx.cleanups) fn();
       ctx.parent = null;
@@ -119,7 +118,7 @@ export function component<P extends Record<string, any> = {}>(
       originalDispose();
     };
 
-    return template;
+    return node;
   }) as ComponentDef<P>;
 
   def.__whisq_component = true;

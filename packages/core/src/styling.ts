@@ -13,13 +13,20 @@
 // ── sheet() — Scoped CSS-in-JS ──────────────────────────────────────────────
 
 type StyleValue = string | number;
-type StyleRule = Record<string, StyleValue>;
-type NestedRule = StyleRule & {
-  [key: `&${string}`]: StyleRule; // &:hover, &:focus, &::before, &.active
-  [key: `@${string}`]: StyleRule; // @media queries
-};
 
-type SheetDef = Record<string, NestedRule | StyleRule>;
+// A rule is a bag of CSS properties that may also contain nested rules.
+// The runtime applies the prefix convention — keys starting with "&"
+// (pseudo-classes / pseudo-elements / combinators) or "@" (media queries,
+// @supports, …) are treated as nested scopes; everything else is a direct
+// CSS property. The type is recursive so arbitrary-depth nesting (e.g.
+// `"& a": { "&:hover": { ... } }`) type-checks — TypeScript index
+// signatures can't discriminate on template-literal key shape, so runtime
+// validation is the source of truth for which keys are nested vs base.
+interface StyleRule {
+  [key: string]: StyleValue | StyleRule;
+}
+
+type SheetDef = Record<string, StyleRule>;
 type SheetResult<T extends SheetDef> = {
   [K in keyof T]: string; // class name per key
 } & {
@@ -338,6 +345,20 @@ type ThemeTokens = Record<
  *   }
  * })
  * ```
+ *
+ * ### Call-site conventions
+ *
+ * - **Call once, at module scope** of your `styles.ts` file. The tokens
+ *   become CSS custom properties on `:root` and are available everywhere.
+ * - **Duplicate calls = last-call-wins.** A second `theme()` call replaces
+ *   the first `<style id="whisq-style-whisq-theme">` block entirely; the
+ *   new tokens take effect immediately. This is intentional — it enables
+ *   theme-switching (e.g., `theme(lightTokens)` → `theme(darkTokens)` in a
+ *   toggle handler) without leaking old tokens.
+ * - **SSR-safe.** On the server (`typeof document === "undefined"`), the
+ *   call is a no-op. The CSS variables won't appear in server-rendered
+ *   HTML; attach theme tokens in a `<style>` block in your SSR template
+ *   until a dedicated server renderer ships.
  */
 export function theme(tokens: ThemeTokens): void {
   let cssText = ":root{";
@@ -389,6 +410,12 @@ function splitRules(rules: Record<string, any>): {
 }
 
 function injectCSS(id: string, cssText: string): void {
+  // SSR-safe: on the server there is no `document` to inject into. We still
+  // want `sheet()` to return its in-memory classMap (so server-rendered
+  // markup can reference the correct class names that the client will then
+  // hydrate against), but the actual DOM injection is skipped.
+  if (typeof document === "undefined") return;
+
   // Remove existing style with same id
   const existing = document.getElementById(`whisq-style-${id}`);
   if (existing) existing.remove();

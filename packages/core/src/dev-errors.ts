@@ -48,6 +48,41 @@ export class WhisqStructureError extends Error {
   }
 }
 
+export interface WhisqKeyByErrorFields {
+  /** All keys present in the source array at write time, in source order. */
+  sourceKeys: unknown[];
+  /** The key the write was trying to match against. */
+  targetKey: unknown;
+  /** The field name being written (from bindField's `key` argument). */
+  field: string;
+}
+
+/**
+ * Thrown by `bindField()` in dev mode (or with `strict: true`) when a write
+ * can't find an item in the source array whose `keyBy(...)` matches the
+ * current accessor's key. The typical cause is a stale accessor (the item
+ * was removed from the source after the accessor was created) or a broken
+ * `keyBy` function (returns a different key for read vs write).
+ *
+ * Production builds without `strict: true` log a warning and discard the
+ * write instead of throwing.
+ */
+export class WhisqKeyByError extends Error {
+  readonly sourceKeys: unknown[];
+  readonly targetKey: unknown;
+  readonly field: string;
+
+  constructor(fields: WhisqKeyByErrorFields) {
+    super(
+      `bindField: no item in source matched ${String(fields.targetKey)}; write to "${fields.field}" discarded. Source keys at write time: [${fields.sourceKeys.map(String).join(", ")}].`,
+    );
+    this.name = "WhisqKeyByError";
+    this.sourceKeys = fields.sourceKeys;
+    this.targetKey = fields.targetKey;
+    this.field = fields.field;
+  }
+}
+
 /**
  * Short human description of any value — used for the `received` field of a
  * structure error. Deliberately terse so the composed message stays short.

@@ -1,6 +1,6 @@
 {
   "name": "@whisq/core",
-  "version": "0.1.0-alpha.7",
+  "version": "0.1.0-alpha.8",
   "description": "The AI-native JavaScript framework that senses what you mean — reactive signals, templates, and components",
   "type": "module",
   "main": "./dist/index.js",
@@ -22,6 +22,10 @@
     "./forms": {
       "types": "./dist/forms.d.ts",
       "import": "./dist/forms.js"
+    },
+    "./ids": {
+      "types": "./dist/ids.d.ts",
+      "import": "./dist/ids.js"
     }
   },
   "files": [

@@ -8,9 +8,20 @@
 
 import { type Signal, isSignal } from "./reactive.js";
 import type { TextBind, NumberBind, CheckboxBind, RadioBind } from "./bind.js";
+import { WhisqKeyByError } from "./dev-errors.js";
 
 interface Common<T> {
   keyBy?: (item: T) => unknown;
+  /**
+   * Error on no-match writes instead of warning. Defaults to `true` in dev
+   * (`process.env.NODE_ENV !== "production"`) and `false` in production, so
+   * a stale accessor or broken `keyBy` surfaces as a `WhisqKeyByError` in
+   * the dev loop but degrades to `console.warn` + discard in a shipped
+   * build. Pass `strict: false` in tests that deliberately exercise the
+   * no-match path, or `strict: true` in production if you want throws in
+   * both environments.
+   */
+  strict?: boolean;
 }
 
 export type BindFieldOptions<T> =
@@ -78,6 +89,8 @@ export function bindField<T, K extends keyof T>(
     (options as Common<T>)?.keyBy ??
     ((t: T) => (t as { id?: unknown }).id);
 
+  const strictOpt = (options as Common<T>)?.strict;
+
   const write = (next: T[K]): void => {
     const target = keyBy(item());
     let matched = false;
@@ -89,6 +102,15 @@ export function bindField<T, K extends keyof T>(
       return t;
     });
     if (!matched) {
+      const strict =
+        strictOpt ?? process.env.NODE_ENV !== "production";
+      if (strict) {
+        throw new WhisqKeyByError({
+          sourceKeys: source.value.map((t) => keyBy(t)),
+          targetKey: target,
+          field: String(key),
+        });
+      }
       // eslint-disable-next-line no-console
       console.warn(
         `bindField: no item in source matched ${String(target)}; write to "${String(key)}" discarded.`,

@@ -74,9 +74,54 @@ type ReactiveProp<T> = T | (() => T);
 type StyleValue = string | number | null | undefined;
 export type StyleObject = Record<string, StyleValue | (() => StyleValue)>;
 
+/**
+ * The accessor passed to a keyed `each()`'s render callback. It is both
+ * **callable** (`todo()` returns the current item — backwards-compatible
+ * with pre-alpha.8 code) **and** **signal-shaped** (`todo.value`,
+ * `todo.peek()`) — new code should prefer `todo.value.<field>` for the
+ * uniform reactive-access rule.
+ *
+ * ```ts
+ * // new canonical shape — joins the `() => sig.value` pattern
+ * each(() => todos.value, (todo) =>
+ *   li(() => todo.value.text),
+ *   { key: (t) => t.id },
+ * )
+ *
+ * // still works (call form) — bindField and other `() => T` consumers
+ * // continue to accept the accessor without modification
+ * each(() => todos.value, (todo) =>
+ *   input({ ...bindField(todos, todo, "done", { as: "checkbox" }) }),
+ *   { key: (t) => t.id },
+ * )
+ * ```
+ */
+export interface ItemAccessor<T> {
+  (): T;
+  readonly value: T;
+  peek(): T;
+}
+
+/**
+ * A single source inside a `class: [...]` array. Strings become class names;
+ * falsy values (`false | null | undefined | 0 | ""`) are filtered out,
+ * enabling the `cond && "active"` shorthand; functions are reactive — each
+ * function is called during the render effect, so reads inside it track.
+ */
+export type ClassArraySource =
+  | string
+  | false
+  | null
+  | undefined
+  | 0
+  | ""
+  | (() => string | false | null | undefined);
+
 interface BaseProps {
   ref?: Ref;
-  class?: ReactiveProp<string | undefined>;
+  class?:
+    | ReactiveProp<string | undefined>
+    | readonly ClassArraySource[];
   id?: ReactiveProp<string | undefined>;
   style?: ReactiveProp<string | undefined> | StyleObject;
   hidden?: ReactiveProp<boolean>;
@@ -224,6 +269,22 @@ export function h(
       if (key === "style" && isPlainStyleObject(value)) {
         // Style object — per-property reactive subscriptions
         applyStyleObject(el as HTMLElement, value, disposers);
+        continue;
+      }
+      if (key === "class" && Array.isArray(value)) {
+        // Array form (WHISQ-97): class: ["btn", () => ..., cond && "x"].
+        // Reactive if any source is a function; static otherwise. Falsy
+        // sources (false / null / undefined / 0 / "") are filtered out.
+        const sources = value as readonly ClassArraySource[];
+        const hasReactive = sources.some((s) => typeof s === "function");
+        if (hasReactive) {
+          const dispose = effect(() => {
+            applyProp(el, "class", joinClassArray(sources));
+          });
+          disposers.push(dispose);
+        } else {
+          applyProp(el, "class", joinClassArray(sources));
+        }
         continue;
       }
       if (key.startsWith("on") && typeof value === "function") {
@@ -676,14 +737,20 @@ export function each<T>(
 ): () => Child[];
 export function each<T>(
   items: () => T[],
-  render: (item: () => T, index: () => number) => WhisqNode,
+  render: (
+    item: ItemAccessor<T>,
+    index: ItemAccessor<number>,
+  ) => WhisqNode,
   options: { key: (item: T) => unknown },
 ): WhisqNode;
 export function each<T>(
   items: () => T[],
   render:
     | ((item: T, index: number) => WhisqNode)
-    | ((item: () => T, index: () => number) => WhisqNode),
+    | ((
+        item: ItemAccessor<T>,
+        index: ItemAccessor<number>,
+      ) => WhisqNode),
   options?: { key: (item: T) => unknown },
 ): (() => Child[]) | WhisqNode {
   if (process.env.NODE_ENV !== "production") {
@@ -733,8 +800,8 @@ export function each<T>(
   // array is replaced with new items at the same key (WHISQ-62).
   const keyFn = options.key;
   const renderAccessor = render as (
-    item: () => T,
-    index: () => number,
+    item: ItemAccessor<T>,
+    index: ItemAccessor<number>,
   ) => WhisqNode;
   const marker = document.createComment("whisq-each");
   const disposers: (() => void)[] = [];
@@ -1004,6 +1071,20 @@ function isPlainStyleObject(value: unknown): value is StyleObject {
   }
   const proto = Object.getPrototypeOf(value);
   return proto === Object.prototype || proto === null;
+}
+
+function joinClassArray(sources: readonly ClassArraySource[]): string {
+  const parts: string[] = [];
+  for (const src of sources) {
+    if (!src) continue; // filters false / null / undefined / 0 / ""
+    if (typeof src === "string") {
+      parts.push(src);
+    } else if (typeof src === "function") {
+      const result = src();
+      if (result) parts.push(result);
+    }
+  }
+  return parts.join(" ");
 }
 
 function camelToKebab(str: string): string {
