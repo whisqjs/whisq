@@ -273,3 +273,52 @@ describe("theme()", () => {
     expect(styleTags[0].textContent).not.toContain("--color-primary:red");
   });
 });
+
+// ── SSR safety ──────────────────────────────────────────────────────────────
+
+describe("styling SSR safety", () => {
+  // Simulate a server environment where `document` is undefined (the usual
+  // Node SSR shape). We do it via Object.defineProperty because jsdom exposes
+  // `document` as a non-configurable global in some setups.
+  function withoutDocument<T>(fn: () => T): T {
+    const originalDocument = globalThis.document;
+    // @ts-expect-error intentional delete for SSR simulation
+    delete (globalThis as { document?: Document }).document;
+    try {
+      return fn();
+    } finally {
+      (globalThis as { document?: Document }).document = originalDocument;
+    }
+  }
+
+  it("theme() no-ops when document is undefined (server)", () => {
+    expect(() =>
+      withoutDocument(() => {
+        theme({ color: { primary: "red" }, space: { md: "1rem" } });
+      }),
+    ).not.toThrow();
+  });
+
+  it("sheet() returns the classMap when document is undefined (server)", () => {
+    const result = withoutDocument(() =>
+      sheet({
+        card: { padding: "1rem" },
+        title: { fontSize: "1.5rem" },
+      }),
+    );
+
+    // Class names must be generated — they're referenced by server-rendered
+    // markup that the client will then hydrate against.
+    expect(typeof result.card).toBe("string");
+    expect(typeof result.title).toBe("string");
+    expect(result.card).not.toBe(result.title);
+  });
+
+  it("sheet() does not throw when document is undefined", () => {
+    expect(() =>
+      withoutDocument(() => {
+        sheet({ btn: { color: "red", "&:hover": { color: "blue" } } });
+      }),
+    ).not.toThrow();
+  });
+});
