@@ -14,6 +14,7 @@
 import { effect, isSignal, setEffectErrorHandler } from "./reactive.js";
 import { reconcileKeyed, type KeyedEntry } from "./reconcile.js";
 import type { Ref } from "./ref.js";
+import { WhisqStructureError, describeValue } from "./dev-errors.js";
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -563,10 +564,13 @@ type MatchRender = () => WhisqNode | string | null;
 type MatchBranch = readonly [() => boolean, MatchRender];
 
 /**
- * Multi-branch conditional renderer. Evaluates branches in order and renders
- * the first whose predicate returns truthy. An optional trailing fallback
- * (a bare render function, not wrapped in a tuple) renders when no branch
- * matches. Re-evaluates reactively like other children.
+ * **Predicate-chain** conditional renderer — _not_ pattern matching.
+ * Evaluates an `if / else-if` chain of `[() => predicate, () => render]` tuples
+ * and renders the first whose predicate returns truthy. An optional trailing
+ * **bare render function** (not a tuple) is the fallback, rendered only when
+ * every predicate is falsy. Returns `null` if no branch matches and no
+ * fallback is given. Re-evaluates reactively on any signal read inside the
+ * predicates.
  *
  * ```ts
  * div(
@@ -574,16 +578,63 @@ type MatchBranch = readonly [() => boolean, MatchRender];
  *     [() => users.loading(),    () => p("Loading...")],
  *     [() => !!users.error(),    () => p({ class: "error" }, users.error()!.message)],
  *     [() => !!users.data(),     () => List({ items: users.data()! })],
- *     () => p("No data yet."), // fallback
+ *     () => p("No data yet."), // fallback — bare fn, no tuple
  *   ),
  * )
  * ```
  *
- * First-true-wins: if two predicates are true, only the earlier branch renders.
+ * - **Shape**: every branch is a tuple `[() => boolean, () => WhisqNode | string | null]`.
+ *   No object form (e.g. `match({ loading: ..., error: ... })`) — this is a
+ *   predicate chain, not a value-dispatch table. For value dispatch, use a
+ *   plain getter with a switch: `() => { switch (status.value) { ... } }`.
+ * - **First-true-wins**: if two predicates are true, only the earlier branch
+ *   renders. Order branches from most specific to least.
+ * - **Fallback position**: bare render fn goes _last_. Putting it in the
+ *   middle is a bug — in dev mode it throws a `WhisqStructureError`.
  */
 export function match(...branches: MatchBranch[]): () => Child;
 export function match(...args: [...MatchBranch[], MatchRender]): () => Child;
 export function match(...args: Array<MatchBranch | MatchRender>): () => Child {
+  if (process.env.NODE_ENV !== "production") {
+    for (let i = 0; i < args.length; i++) {
+      const arg = args[i];
+      const isLast = i === args.length - 1;
+      if (Array.isArray(arg)) {
+        if (
+          arg.length !== 2 ||
+          typeof arg[0] !== "function" ||
+          typeof arg[1] !== "function"
+        ) {
+          throw new WhisqStructureError({
+            element: "match",
+            expected: "a branch tuple `[() => boolean, () => WhisqNode]`",
+            received: describeValue(arg),
+            hint: "Each branch must be a two-element tuple of functions. If you were reaching for pattern matching on a value, use `() => { switch (value.value) { ... } }` inside a getter child instead.",
+          });
+        }
+      } else if (typeof arg === "function") {
+        if (!isLast) {
+          throw new WhisqStructureError({
+            element: "match",
+            expected: "fallback render (bare function) to be the last argument",
+            received: `fallback at position ${i} of ${args.length}`,
+            hint: "Only one fallback is allowed, and it must come after every tuple branch. Reorder so the bare render function is last.",
+          });
+        }
+      } else {
+        throw new WhisqStructureError({
+          element: "match",
+          expected: "a branch tuple or a trailing fallback render function",
+          received: describeValue(arg),
+          hint:
+            typeof arg === "object" && arg !== null
+              ? "`match()` is a predicate chain, not a value-dispatch table. Plain objects like `{ loading: ..., error: ... }` aren't accepted — write tuples: `[() => state.value === 'loading', () => ...]`."
+              : "Each argument must be `[() => boolean, () => WhisqNode]` or (in the last position) a bare `() => WhisqNode` fallback.",
+        });
+      }
+    }
+  }
+
   const last = args[args.length - 1];
   const hasFallback = typeof last === "function";
   const fallback = hasFallback ? (last as MatchRender) : undefined;
@@ -635,11 +686,45 @@ export function each<T>(
     | ((item: () => T, index: () => number) => WhisqNode),
   options?: { key: (item: T) => unknown },
 ): (() => Child[]) | WhisqNode {
+  if (process.env.NODE_ENV !== "production") {
+    if (typeof items !== "function") {
+      throw new WhisqStructureError({
+        element: "each",
+        expected: "items to be a function `() => T[]`",
+        received: describeValue(items),
+        hint: "Pass a getter, not the array itself: `each(() => todos.value, ...)` not `each(todos.value, ...)`.",
+      });
+    }
+    if (typeof render !== "function") {
+      throw new WhisqStructureError({
+        element: "each",
+        expected: "render to be a function",
+        received: describeValue(render),
+      });
+    }
+  }
+
+  const getItems = (): T[] => {
+    const result = items();
+    if (process.env.NODE_ENV !== "production" && !Array.isArray(result)) {
+      throw new WhisqStructureError({
+        element: "each",
+        expected: "items() to return an array",
+        received: describeValue(result),
+        hint:
+          result == null
+            ? "Data hasn't loaded yet. Gate the list with `when(() => data(), () => ul(each(...)))` or return `[]` while loading."
+            : "Return an array from the items getter — objects and maps need to be converted first (e.g. `Object.values(users.value)`).",
+      });
+    }
+    return result;
+  };
+
   if (!options?.key) {
     // Non-keyed: simple map — items are snapshots per render, no staleness
     // issue because nodes are recreated on every source change.
     const renderSnapshot = render as (item: T, index: number) => WhisqNode;
-    return () => items().map((item, i) => renderSnapshot(item, i));
+    return () => getItems().map((item, i) => renderSnapshot(item, i));
   }
 
   // Keyed: return a WhisqNode that manages its own reconciliation.
@@ -661,7 +746,7 @@ export function each<T>(
   fragment.appendChild(marker);
 
   const dispose = effect(() => {
-    const newItems = items();
+    const newItems = getItems();
     const parent = marker.parentNode;
     if (!parent) return;
 
@@ -1032,6 +1117,19 @@ function appendChildren(
     disposers.push(dispose);
     return;
   }
+
+  if (process.env.NODE_ENV !== "production") {
+    throw new WhisqStructureError({
+      element: (parent as Element).tagName?.toLowerCase() ?? "element",
+      expected:
+        "WhisqNode | string | number | boolean | null | undefined | function | array",
+      received: describeValue(child),
+      hint:
+        typeof child === "object" && !Array.isArray(child)
+          ? "Plain objects can't be rendered as children. Did you forget to call a component (`MyComponent({})` not `MyComponent`), or wrap a signal read in `() => signal.value`?"
+          : undefined,
+    });
+  }
 }
 
 function renderChild(
@@ -1067,5 +1165,18 @@ function renderChild(
     tracker.push(child.el);
     disposers.push(() => child.dispose());
     return;
+  }
+
+  if (process.env.NODE_ENV !== "production") {
+    throw new WhisqStructureError({
+      element: (parent as Element).nodeName?.toLowerCase() ?? "element",
+      expected:
+        "WhisqNode | string | number | boolean | null | undefined | array",
+      received: describeValue(child),
+      hint:
+        typeof child === "function"
+          ? "A reactive child `() => value` returned another function. Did you wrap a getter twice (`() => () => sig.value`)?"
+          : "Plain objects can't be rendered. If this came from a signal, wrap the read in `() => ...`; if it's a component, call it: `MyComponent({})`.",
+    });
   }
 }

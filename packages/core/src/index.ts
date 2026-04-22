@@ -112,6 +112,10 @@ export type { Ref, ElementRef } from "./ref.js";
 export { sheet, styles, cx, rcx, sx, theme } from "./styling.js";
 export type { StyleObject } from "./elements.js";
 
+// Dev-mode diagnostics
+export { WhisqStructureError } from "./dev-errors.js";
+export type { WhisqStructureErrorFields } from "./dev-errors.js";
+
 // Forms
 export { bind } from "./bind.js";
 export type {
@@ -121,3 +125,8 @@ export type {
   RadioBind,
   BindOptions,
 } from "./bind.js";
+export { bindField } from "./bindField.js";
+export type { BindFieldOptions } from "./bindField.js";
+
+// bindPath() for nested-object paths lives at `@whisq/core/forms` — kept off
+// the top-level bundle so apps that don't need deep binding pay no size cost.

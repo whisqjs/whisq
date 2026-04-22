@@ -18,6 +18,8 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-5CE0F2" alt="License"></a>
 </p>
 
+Whisq is designed so large language models produce working code on the first try. The complete framework is ~5 KB gzipped and the full API fits in a prompt. No hooks rules. No reactivity caveats. No compile-time magic — just signals for state, functions for UI.
+
 ```ts
 import { signal, component, div, button, span, mount } from "@whisq/core";
 
@@ -34,14 +36,27 @@ const App = component(() => {
 mount(App({}), document.getElementById("app")!);
 ```
 
-## Why Whisq?
+## For AI assistants
 
-- **Under 5 KB gzipped** — the complete framework
-- **Zero build step** — runs as plain JavaScript, works with any bundler
-- **AI-native** — entire API fits in under 5,000 tokens. AI gets it right the first time.
-- **100% TypeScript** — every element function is fully typed
+Point Claude, Cursor, Copilot, or any coding assistant at one of these before it writes Whisq:
 
-## Get Started
+- **[`whisq.dev/llms.txt`](https://whisq.dev/llms.txt)** — structured site index per the [llmstxt.org](https://llmstxt.org) convention.
+- **[`whisq.dev/llms-full.txt`](https://whisq.dev/llms-full.txt)** — every docs page concatenated into one plain-text fetch (~165 KB, 66 pages).
+- **[`whisq.dev/ai/llm-reference`](https://whisq.dev/ai/llm-reference/)** — compact reference card: the whole framework in one page, two copy-paste tiers (~600 tokens minimum, ~1.7 K complete).
+- **[`unpkg.com/@whisq/core@latest/dist/public-api.json`](https://unpkg.com/@whisq/core@latest/dist/public-api.json)** — machine-readable manifest of every named export, pinned per release.
+
+Need deeper tooling? [`@whisq/mcp-server`](packages/mcp-server) exposes scaffold, validate, query-API, and analyze tools via the Model Context Protocol.
+
+Eight copy-paste prompts that exercise different surfaces of the framework (todo, signup form, chat UI, markdown editor, live dashboard, router SPA, SSR blog, Snake) live in [`docs/AI_TEST_PROMPTS.md`](./docs/AI_TEST_PROMPTS.md).
+
+## For humans
+
+- **~5 KB gzipped** — complete framework (core: 5.08 KB).
+- **Zero build step** — runs as plain JavaScript, works with any bundler.
+- **100% TypeScript** — every element function fully typed, inferred through components.
+- **One reactive wrapper** — every reactive position accepts `() => …`. No hooks rules, no dependency arrays, no stale-closure tax. ([Three read shapes inside the wrapper](packages/core/docs/access-shapes.md) — signal / keyed-each accessor / resource field.)
+
+## Get started
 
 ```bash
 npm create whisq@latest my-app
@@ -50,79 +65,29 @@ npm install
 npm run dev
 ```
 
-Four templates available: `minimal`, `full-app` (router + pages + store), `ssr`, `vite-plugin` (file-based routing).
-
-## Core API
-
-```ts
-// State
-signal(value)              // reactive value
-computed(fn)               // derived value
-effect(fn)                 // side effect (returns dispose)
-batch(fn)                  // batch multiple updates
-
-// Elements — every HTML tag is a function
-div(props?, ...children)
-button(props?, ...children)
-input(props?)
-h1(), h2(), p(), span(), ul(), li(), a(), img(), form(), ...
-
-// Rendering
-when(condition, then, else) // conditional rendering
-each(items, renderFn)       // list rendering
-raw(htmlString)             // raw HTML (trusted content only)
-mount(node, element)        // mount to DOM (returns dispose)
-
-// Components
-component(setupFn)         // function component
-onMount(fn)                // lifecycle — runs after mount
-onCleanup(fn)              // lifecycle — runs on unmount
-resource(fetchFn)          // async data loading
-
-// Styling
-sheet(rules)               // scoped CSS-in-JS
-theme(tokens)              // design tokens as CSS custom properties
-```
+Four templates: `minimal`, `full-app` (router + pages + store), `ssr`, `vite-plugin` (file-based routing).
 
 ## Packages
 
-| Package                                      | Description                                  | Size   |
-| -------------------------------------------- | -------------------------------------------- | ------ |
-| [`@whisq/core`](packages/core)               | Signals, elements, components, styling       | 4.2 KB |
-| [`@whisq/router`](packages/router)           | Signal-based client-side routing             | 2.7 KB |
-| [`@whisq/ssr`](packages/ssr)                 | Server-side rendering + streaming            | 1.0 KB |
-| [`@whisq/testing`](packages/testing)         | Render, query, fireEvent, userEvent, waitFor | —      |
-| [`@whisq/vite-plugin`](packages/vite-plugin) | File-based routing, HMR, code splitting      | —      |
-| [`@whisq/mcp-server`](packages/mcp-server)   | AI tool integration (MCP protocol)           | —      |
-| [`@whisq/devtools`](packages/devtools)       | Signal inspection and component viewer       | —      |
-| [`@whisq/sandbox`](packages/sandbox)         | Isolated code execution                      | —      |
-| [`create-whisq`](packages/create-whisq)      | Project scaffolding CLI                      | —      |
-
-## AI Integration
-
-Whisq is designed for AI-assisted development:
-
-- **MCP Server** — `@whisq/mcp-server` provides scaffold, validate, query API, and analyze tools
-- **Small API surface** — the entire framework fits in <5% of a 200K context window
-- **No footguns** — uniform `() => value` pattern, no hooks rules, no reactivity caveats
-
-### Entry points for AI assistants
-
-Point Claude, ChatGPT, Gemini, Cursor, or any coding assistant at these URLs before it writes Whisq code:
-
-- **Compact LLM reference card:** <https://whisq.dev/ai/llm-reference/> — the whole framework in one page
-- **Machine-readable exports manifest:** <https://unpkg.com/@whisq/core@latest/dist/public-api.json> — every named export in the current release, pinned per version
-- **Copy-paste test prompts:** [`docs/AI_TEST_PROMPTS.md`](./docs/AI_TEST_PROMPTS.md) — eight self-contained prompts (todo, signup form, chat UI, markdown editor, live dashboard, router SPA, SSR blog, Snake) that exercise different surfaces of the framework
-- **Project-structure conventions:** [`packages/core/docs/project-structure.md`](./packages/core/docs/project-structure.md) — canonical file layout (one component per file, `main.ts` mounts and nothing else) so AI output matches the scaffolder templates
-
-> **Coming soon:** `whisq.dev/llms.txt` (structured index, [llmstxt.org](https://llmstxt.org) convention) and `whisq.dev/llms-full.txt` (full docs as one plain-text fetch) are merged to docs `develop` and will go live once the docs repo cuts its next release.
+| Package                                      | Description                                  | Size    |
+| -------------------------------------------- | -------------------------------------------- | ------- |
+| [`@whisq/core`](packages/core)               | Signals, elements, components, styling       | 5.08 KB |
+| [`@whisq/router`](packages/router)           | Signal-based client-side routing             | 2.85 KB |
+| [`@whisq/ssr`](packages/ssr)                 | Server-side rendering + streaming            | 982 B   |
+| [`@whisq/testing`](packages/testing)         | Render, query, fireEvent, userEvent, waitFor | —       |
+| [`@whisq/vite-plugin`](packages/vite-plugin) | File-based routing, HMR, code splitting      | —       |
+| [`@whisq/mcp-server`](packages/mcp-server)   | AI tool integration (MCP protocol)           | —       |
+| [`@whisq/devtools`](packages/devtools)       | Signal inspection and component viewer       | —       |
+| [`@whisq/sandbox`](packages/sandbox)         | Isolated code execution                      | —       |
+| [`create-whisq`](packages/create-whisq)      | Project scaffolding CLI                      | —       |
 
 ## Documentation
 
+- **[whisq.dev](https://whisq.dev)** — full documentation site
 - [Getting Started](https://whisq.dev/getting-started/introduction/) — installation, quick start, first component
 - [Core Concepts](https://whisq.dev/core-concepts/signals/) — signals, elements, components, styling
-- [API Reference](https://whisq.dev/api/signal/) — complete API docs
-- [Guides](https://whisq.dev/guides/routing/) — routing, SSR, forms, testing, data fetching
+- [API Reference](https://whisq.dev/api/signal/) — every named export
+- [Guides](https://whisq.dev/guides/routing/) — routing, SSR, forms, data fetching, testing
 - [Examples](https://whisq.dev/examples/counter/) — counter, todo, dashboard, forms
 - [Playground](https://whisq.dev/playground/) — try Whisq in the browser
 

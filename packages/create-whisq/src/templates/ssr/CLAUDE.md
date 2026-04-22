@@ -12,7 +12,7 @@ import {
   div, span, h1, h2, h3, p, button, input, textarea, select, option,
   a, img, ul, ol, li, table, thead, tbody, tr, th, td, form, label,
   header, footer, nav, main, section, article, aside, strong, em,
-  h, raw, when, each, mount,
+  h, raw, when, match, each, mount,
   component, onMount, onCleanup, resource,
 } from "@whisq/core";
 ```
@@ -72,16 +72,47 @@ div({ hidden: () => !visible.value }, "Now you see me")
 
 #### Reactive shapes — pick the right one
 
-Four shapes cover every reactive position. The one-line decision flow: *"single signal you own → `bind()`; field inside an item inside a signal-held array → manual event pair."*
+Four shapes cover every reactive position. The one-line decision flow: *"single signal you own → `bind()`; field inside an item inside a signal-held array → `bindField()`."*
 
 | Shape            | Example                                                            | Use when                                             |
 | ---------------- | ------------------------------------------------------------------ | ---------------------------------------------------- |
 | Getter child     | `span(() => count.value)`                                          | A signal drives inline text                          |
 | Getter prop      | `{ class: () => active.value ? "on" : "off" }`                      | A signal drives an element attribute / class / style |
 | `bind()` spread  | `input({ ...bind(email) })`                                        | Two-way binding one signal into one form input       |
-| Manual event pair | `{ checked: () => todo().done, onchange: () => toggle(todo().id) }` | Field inside an item inside a keyed `each`          |
+| `bindField()` spread | `input({ type: "checkbox", ...bindField(todos, todo, "done", { as: "checkbox" }) })` | Field inside an item inside a keyed `each`           |
 
 Inside a keyed `each(..., { key })`, the callback’s `item` is an **accessor function** — call it (`todo()`) to read the current item. Getters that close over `todo` directly go stale when the array is replaced.
+
+#### Three ways to read inside a getter
+
+The `() => …` wrapper is uniform; what goes **inside** it depends on the source.
+
+| Source              | Read inside getter       |
+| ------------------- | ------------------------ |
+| Plain signal        | `() => sig.value`      |
+| Keyed `each` item | `() => todo().text`    |
+| `resource()` field | `() => users.loading()` |
+
+Signals use `.value`; accessors (keyed-each items, resource fields) are already callable — wrap them in `() =>` for reactivity. Full canonical reference: [`packages/core/docs/access-shapes.md`](https://github.com/whisqjs/whisq/blob/develop/packages/core/docs/access-shapes.md).
+
+#### Accessors across component boundaries
+
+When you split a child component that needs a reactive item, **pass the accessor — don't call it at the parent**:
+
+```ts
+// parent
+each(() => todos.value, (todo) => TodoItem({ todo }), { key: t => t.id })
+
+// child — read inside each getter, never destructure props or snapshot at setup
+const TodoItem = component((props: { todo: () => Todo }) => {
+  return li(
+    span(() => props.todo().text),                  // re-reads on every source change
+    button({ onclick: () => remove(props.todo().id) }, "✕"),
+  );
+});
+```
+
+Snapshotting (`const todo = props.todo()` at setup) makes the row freeze at mount — no error, just silent staleness after the next array change. The [access-shapes.md](https://github.com/whisqjs/whisq/blob/develop/packages/core/docs/access-shapes.md) doc covers the full mistake table and the prop-shape variants (pass a signal when the child needs to write; pass a getter when it only reads).
 
 ### Events
 
@@ -96,9 +127,10 @@ div({ onmouseenter: () => hovered.value = true })
 input({ onkeydown: (e) => e.key === "Enter" && submit() })
 ```
 
-### Conditional Rendering — when()
+### Conditional Rendering — when() / match()
 
 ```ts
+// when() — two-way (if / else). Third arg is the else branch.
 div(
   when(() => loggedIn.value,
     () => p("Welcome back!"),
@@ -110,7 +142,21 @@ div(
 div(
   () => isError.value ? p({ class: "error" }, "Something broke") : null,
 )
+
+// match() — predicate chain (if / else-if / ...). First-true-wins.
+// NOT pattern matching — branches are tuples [() => predicate, () => render].
+// Optional trailing bare function is the fallback.
+div(
+  match(
+    [() => users.loading(),  () => p("Loading...")],
+    [() => !!users.error(),  () => p({ class: "error" }, () => users.error().message)],
+    [() => !!users.data(),   () => List({ items: users.data() })],
+    () => p("No data yet."), // fallback — last position only
+  ),
+)
 ```
+
+Use `when()` for if/else, `match()` for if / else-if chains. For value dispatch (switch on a signal), use an inline getter: `() => { switch (status.value) { case "ready": return ReadyView(); /* ... */ } }` — that's a different shape from `match`.
 
 ### List Rendering — each()
 
@@ -208,6 +254,20 @@ const LoginForm = component(() => {
 });
 ```
 
+#### Binding into nested records (opt-in, sub-path import)
+
+For forms on nested objects (`user.profile.email`, `settings.billing.plan`), use `bindPath` — same spread shape as `bind`/`bindField`, key-path instead of one key. Opt-in import so apps that don't need it pay no bundle cost.
+
+```ts
+import { bindPath } from "@whisq/core/forms";
+
+input({ ...bindPath(user, ["profile", "email"]) });
+input({ type: "number", ...bindPath(user, ["profile", "age"], { as: "number" }) });
+input({ type: "checkbox", ...bindPath(user, ["prefs", "dark"], { as: "checkbox" }) });
+```
+
+Writes produce a new root with structural sharing on siblings — `user.prefs` stays `===` across writes to `user.profile.email`. Object paths only; array traversal goes through `bindField` at the array level.
+
 ### Async Data — resource()
 
 ```ts
@@ -259,6 +319,22 @@ export const addItem = (item) => { items.value = [...items.value, item]; };
 // Any component — just import
 import { items, total, addItem } from "./stores/cart";
 ```
+
+### Persisted stores (opt-in, sub-path import)
+
+Use `persistedSignal` when a store should survive reloads. It is in a sub-path export so apps that don't need it pay no bundle cost.
+
+```ts
+// stores/todos.ts
+import { persistedSignal } from "@whisq/core/persistence";
+
+export const todos = persistedSignal<Todo[]>("todos", []);
+// - reads from localStorage on init, writes on change
+// - SSR-safe (returns initial when window is undefined)
+// - falls back to initial on parse/schema error; warns on quota-exceeded
+```
+
+Call at module scope in `stores/` — the write effect lives for the module lifetime by design.
 
 ## Anti-Patterns (DO NOT)
 

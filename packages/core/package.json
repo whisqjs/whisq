@@ -1,6 +1,6 @@
 {
   "name": "@whisq/core",
-  "version": "0.1.0-alpha.6",
+  "version": "0.1.0-alpha.7",
   "description": "The AI-native JavaScript framework that senses what you mean — reactive signals, templates, and components",
   "type": "module",
   "main": "./dist/index.js",
@@ -14,6 +14,14 @@
     "./collections": {
       "types": "./dist/collections.d.ts",
       "import": "./dist/collections.js"
+    },
+    "./persistence": {
+      "types": "./dist/persistence.d.ts",
+      "import": "./dist/persistence.js"
+    },
+    "./forms": {
+      "types": "./dist/forms.d.ts",
+      "import": "./dist/forms.js"
     }
   },
   "files": [
@@ -50,13 +58,6 @@
   },
   "homepage": "https://whisq.dev",
   "sideEffects": false,
-  "size-limit": [
-    {
-      "path": "dist/index.js",
-      "limit": "5 KB",
-      "gzip": true
-    }
-  ],
   "devDependencies": {
     "@size-limit/preset-small-lib": "^11.2.0",
     "jsdom": "^29.0.2",

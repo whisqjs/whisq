@@ -13,10 +13,17 @@
     "@whisq/vite-plugin": "0.1.0-alpha.4"
   },
   "changesets": [
+    "access-shapes-canonical-doc",
+    "accessor-boundaries-docs",
     "alpha-5-batch",
+    "bindfield-for-array-items",
+    "bindpath-for-nested-records",
     "clarify-ref-accessor",
     "each-keyed-accessor-callback",
     "export-event-types",
+    "friendlier-runtime-errors",
+    "match-api-clarity",
+    "persisted-signal",
     "project-structure-conventions",
     "reactive-shapes-taxonomy"
   ]
