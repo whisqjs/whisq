@@ -89,6 +89,25 @@ describe("mountSandboxed() — srcdoc content", () => {
     handle.dispose();
   });
 
+  it("neutralises both --> and --!> HTML comment closers", () => {
+    const handle = mountSandboxed({
+      source: "/* --> and --!> both break HTML comments */",
+      container,
+    });
+    const srcdoc = handle.iframe.getAttribute("srcdoc")!;
+    // Neither comment-close sequence should appear verbatim inside the
+    // interpolated user source region — both must be escaped.
+    // (The srcdoc as a whole may contain unrelated ">" chars, so check
+    // the specific sequences.)
+    const userPortion = srcdoc
+      .split("try {\n")[1]
+      ?.split("\n} catch")[0] ?? "";
+    expect(userPortion).not.toContain("-->");
+    expect(userPortion).not.toContain("--!>");
+    expect(userPortion).toContain("--\\>");
+    handle.dispose();
+  });
+
   it("neutralises </script> inside the source to prevent srcdoc escape", () => {
     const handle = mountSandboxed({
       source: "// </script><img src=x onerror=alert(1)>",

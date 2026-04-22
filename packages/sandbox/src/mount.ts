@@ -255,10 +255,14 @@ function escapeScriptContent(s: string): string {
   // closer with a form that looks identical when serialised back to a
   // string inside the script but is NOT parsed as a closing tag by the
   // HTML tokeniser.
+  //
+  // Per the HTML spec, a comment can be closed by either `-->` or `--!>`
+  // (the legacy "abrupt closing" form). Both must be escaped so an input
+  // containing either can't break out of a surrounding <!-- … --> region.
   return s
     .replace(/<\/(script)/gi, "<\\/$1")
     .replace(/<!--/g, "<\\!--")
-    .replace(/-->/g, "--\\>");
+    .replace(/--!?>/g, "--\\>");
 }
 
 function escapeAttr(s: string): string {
