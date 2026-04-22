@@ -175,6 +175,50 @@ describe("createProject — full-app", () => {
     expect(fs.existsSync(path.join(projectDir, "CLAUDE.md"))).toBe(true);
     expect(fs.existsSync(path.join(projectDir, ".cursorrules"))).toBe(true);
   });
+
+  it("scaffolds components/ with at least one reusable component", () => {
+    const projectDir = path.join(tmpDir, "full-app-components");
+
+    createProject({ projectName: projectDir, template: "full-app" });
+
+    const componentsDir = path.join(projectDir, "src", "components");
+    expect(fs.existsSync(componentsDir)).toBe(true);
+    const componentFiles = fs
+      .readdirSync(componentsDir)
+      .filter((f) => f.endsWith(".ts"));
+    expect(componentFiles.length).toBeGreaterThan(0);
+  });
+
+  it("scaffolds lib/ with at least one utility (no Whisq imports)", () => {
+    const projectDir = path.join(tmpDir, "full-app-lib");
+
+    createProject({ projectName: projectDir, template: "full-app" });
+
+    const libDir = path.join(projectDir, "src", "lib");
+    expect(fs.existsSync(libDir)).toBe(true);
+    const libFiles = fs
+      .readdirSync(libDir)
+      .filter((f) => f.endsWith(".ts"));
+    expect(libFiles.length).toBeGreaterThan(0);
+
+    // lib/ is Whisq-free: utilities should be testable in isolation.
+    for (const file of libFiles) {
+      const contents = fs.readFileSync(path.join(libDir, file), "utf-8");
+      expect(contents).not.toMatch(/from\s+["']@whisq\//);
+    }
+  });
+
+  it("App.ts wraps route content in errorBoundary", () => {
+    const projectDir = path.join(tmpDir, "full-app-error-boundary");
+
+    createProject({ projectName: projectDir, template: "full-app" });
+
+    const app = fs.readFileSync(
+      path.join(projectDir, "src", "App.ts"),
+      "utf-8",
+    );
+    expect(app).toContain("errorBoundary");
+  });
 });
 
 // ── createProject — ssr ───────────────────────────────────────────────────
