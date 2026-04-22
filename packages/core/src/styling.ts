@@ -13,13 +13,20 @@
 // ── sheet() — Scoped CSS-in-JS ──────────────────────────────────────────────
 
 type StyleValue = string | number;
-type StyleRule = Record<string, StyleValue>;
-type NestedRule = StyleRule & {
-  [key: `&${string}`]: StyleRule; // &:hover, &:focus, &::before, &.active
-  [key: `@${string}`]: StyleRule; // @media queries
-};
 
-type SheetDef = Record<string, NestedRule | StyleRule>;
+// A rule is a bag of CSS properties that may also contain nested rules.
+// The runtime applies the prefix convention — keys starting with "&"
+// (pseudo-classes / pseudo-elements / combinators) or "@" (media queries,
+// @supports, …) are treated as nested scopes; everything else is a direct
+// CSS property. The type is recursive so arbitrary-depth nesting (e.g.
+// `"& a": { "&:hover": { ... } }`) type-checks — TypeScript index
+// signatures can't discriminate on template-literal key shape, so runtime
+// validation is the source of truth for which keys are nested vs base.
+interface StyleRule {
+  [key: string]: StyleValue | StyleRule;
+}
+
+type SheetDef = Record<string, StyleRule>;
 type SheetResult<T extends SheetDef> = {
   [K in keyof T]: string; // class name per key
 } & {
