@@ -16,15 +16,23 @@
     "access-shapes-canonical-doc",
     "accessor-boundaries-docs",
     "alpha-5-batch",
+    "array-accepting-class-prop",
+    "bindfield-dev-strict-mode",
     "bindfield-for-array-items",
     "bindpath-for-nested-records",
     "clarify-ref-accessor",
+    "component-types-and-sheet-nested-selectors",
     "each-keyed-accessor-callback",
     "export-event-types",
     "friendlier-runtime-errors",
+    "full-app-template-canonical-shape",
+    "hybrid-item-accessor-keyed-each",
     "match-api-clarity",
+    "partition-and-random-id-helpers",
     "persisted-signal",
+    "persistedsignal-onschemafailure",
     "project-structure-conventions",
-    "reactive-shapes-taxonomy"
+    "reactive-shapes-taxonomy",
+    "theme-sheet-ssr-guard"
   ]
 }
