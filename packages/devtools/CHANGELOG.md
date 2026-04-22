@@ -1,5 +1,18 @@
 # @whisq/devtools
 
+## 0.1.0-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [8f645a8]
+- Updated dependencies [401bfca]
+- Updated dependencies [0c1dccf]
+- Updated dependencies [91740a2]
+- Updated dependencies [2809555]
+- Updated dependencies [1b669b4]
+- Updated dependencies [0afc98b]
+  - @whisq/core@0.1.0-alpha.8
+
 ## 0.1.0-alpha.7
 
 ### Patch Changes
