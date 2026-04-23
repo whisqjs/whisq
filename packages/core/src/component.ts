@@ -155,51 +155,47 @@ export function component<P extends Record<string, any> = {}>(
  * need that, wrap in an element.
  */
 function liftFunctionChild(fn: () => unknown): WhisqNode {
-  const startMarker = document.createComment("whisq-component-start");
-  const endMarker = document.createComment("whisq-component-end");
+  const startMarker = document.createComment("whisq-c-start");
+  const endMarker = document.createComment("whisq-c-end");
   const fragment = document.createDocumentFragment();
   fragment.appendChild(startMarker);
   fragment.appendChild(endMarker);
 
-  let currentWhisqNode: WhisqNode | null = null;
-  let currentTextNodes: Node[] = [];
+  let currentNodes: Node[] = [];
+  let currentDispose: (() => void) | null = null;
 
   function clearCurrent(): void {
-    if (currentWhisqNode) {
-      currentWhisqNode.el.parentNode?.removeChild(currentWhisqNode.el);
-      currentWhisqNode.dispose();
-      currentWhisqNode = null;
+    if (currentDispose) {
+      currentDispose();
+      currentDispose = null;
     }
-    for (const n of currentTextNodes) {
-      n.parentNode?.removeChild(n);
-    }
-    currentTextNodes = [];
+    for (const n of currentNodes) n.parentNode?.removeChild(n);
+    currentNodes = [];
   }
 
   const effectDispose = effect(() => {
     clearCurrent();
     const result = fn();
     const parent = startMarker.parentNode;
-    if (!parent) return; // not yet mounted (fragment still detached)
+    if (!parent) return;
     if (result == null || result === false || result === true) return;
 
     if (typeof result === "string" || typeof result === "number") {
-      const textNode = document.createTextNode(String(result));
-      parent.insertBefore(textNode, endMarker);
-      currentTextNodes.push(textNode);
+      const node = document.createTextNode(String(result));
+      parent.insertBefore(node, endMarker);
+      currentNodes = [node];
       return;
     }
 
     if (
       typeof result === "object" &&
       result !== null &&
-      "__whisq" in result &&
-      "el" in result &&
-      "dispose" in result
+      "__whisq" in result
     ) {
-      const whisqNode = result as WhisqNode;
-      parent.insertBefore(whisqNode.el, endMarker);
-      currentWhisqNode = whisqNode;
+      const wn = result as WhisqNode;
+      parent.insertBefore(wn.el, endMarker);
+      currentNodes = [wn.el];
+      currentDispose = () => wn.dispose();
       return;
     }
 
@@ -207,12 +203,12 @@ function liftFunctionChild(fn: () => unknown): WhisqNode {
       throw new WhisqStructureError({
         element: "component",
         expected:
-          "the component-root function child to yield a WhisqNode / string / number / null",
+          "function-child to yield a WhisqNode / string / number / null",
         received: describeValue(result),
         hint:
           typeof result === "function"
-            ? "Nested function children at the component root aren't supported — unwrap one layer, or wrap the outer return in an element (`div(() => ...)`)."
-            : "Arrays and plain objects aren't valid component-root returns. Wrap in an element function like `div(...)` instead.",
+            ? "Nested function children aren't supported as a component root — wrap in an element."
+            : "Wrap arrays / plain objects in an element function like `div(...)`.",
       });
     }
   });

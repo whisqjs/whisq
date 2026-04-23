@@ -32,4 +32,6 @@ Mechanism is the same fragment + start/end marker pattern `errorBoundary` and ke
 
 Backwards compatible. The widened setup signature is `(props: P) => WhisqNode | (() => unknown)`; existing `component(() => div(...))` code is unaffected. Dev-mode `WhisqStructureError` messages now mention both accepted shapes.
 
+Bundle size: `@whisq/core` grows ~150 B gzipped (5.5 → 5.65 KB). The size-limit budget bumps from 5.5 KB to 6.0 KB to absorb this cost with room to grow, documented in `packages/core/.size-limit.cjs`.
+
 Closes WHISQ-121. The docs-side companion (whisqjs/whisq.dev#162) will need an update once the `/api/match/` page can point at "match() works directly as a component root" as the idiom.
