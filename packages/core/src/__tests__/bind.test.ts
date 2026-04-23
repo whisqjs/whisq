@@ -1,7 +1,9 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { signal } from "../reactive.js";
 import { input, textarea, select, option, mount } from "../elements.js";
 import { bind } from "../bind.js";
+import { bindField } from "../bindField.js";
+import { bindPath } from "../bindPath.js";
 
 let container: HTMLElement;
 let dispose: () => void;
@@ -177,5 +179,151 @@ describe("bind() — input validation", () => {
     expect(() => bind({} as never)).toThrow(TypeError);
     expect(() => bind(null as never)).toThrow(TypeError);
     expect(() => bind("not a signal" as never)).toThrow(TypeError);
+  });
+});
+
+// ── Duplicate-handler dev warning (WHISQ-120) ───────────────────────────────
+//
+// Dev-only detection of the "spread bind() then overwrite the same event
+// handler" footgun. The sentinel mechanism lives in bind-sentinel.ts and
+// catches direction 1 (spread first, user handler second). Direction 2
+// (user handler first, bind spread second) isn't detectable from final
+// props — documented limitation.
+
+describe("bind() duplicate-handler warning (direction 1)", () => {
+  let warn: ReturnType<typeof vi.spyOn>;
+  beforeEach(() => {
+    warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  });
+  afterEach(() => {
+    warn.mockRestore();
+  });
+
+  it("warns when ...bind(sig) is followed by an overriding oninput", () => {
+    const name = signal("");
+    dispose = mount(
+      input({ ...bind(name), oninput: () => {} }),
+      container,
+    );
+    expect(warn).toHaveBeenCalledTimes(1);
+    const msg = warn.mock.calls[0]![0] as string;
+    expect(msg).toContain("duplicate handler");
+    expect(msg).toContain('"oninput"');
+    expect(msg).toContain("<input>");
+  });
+
+  it("warns when ...bind(sig, checkbox) is followed by an overriding onchange", () => {
+    const agreed = signal(false);
+    dispose = mount(
+      input({
+        type: "checkbox",
+        ...bind(agreed, { as: "checkbox" }),
+        onchange: () => {},
+      }),
+      container,
+    );
+    expect(warn).toHaveBeenCalledTimes(1);
+    const msg = warn.mock.calls[0]![0] as string;
+    expect(msg).toContain('"onchange"');
+  });
+
+  it("does NOT warn on the clean use — ...bind(sig) alone", () => {
+    const name = signal("");
+    dispose = mount(input({ ...bind(name) }), container);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("warns once per overwritten handler (not per key in the sentinel)", () => {
+    // bind() text returns { value, oninput }. value is not an on* handler,
+    // so only oninput is tracked. Overwriting oninput → one warning.
+    // Overwriting value (a non-handler) → no warning.
+    const name = signal("");
+    dispose = mount(
+      input({ ...bind(name), value: "override", oninput: () => {} }),
+      container,
+    );
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it("does NOT warn in production", () => {
+    const originalEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = "production";
+    try {
+      const name = signal("");
+      dispose = mount(
+        input({ ...bind(name), oninput: () => {} }),
+        container,
+      );
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      process.env.NODE_ENV = originalEnv;
+    }
+  });
+
+  it("known limitation: does NOT warn when user handler is written first, then bind is spread on top (direction 2)", () => {
+    // This is an honest acknowledgement of the runtime limitation — by the
+    // time the element builder sees props, direction-2 overwrites have
+    // already lost their trace. The user's handler is gone, but the sentinel
+    // matches the current oninput so no warning fires. Documented in the
+    // warning message's hint: "spread bind LAST so your handler is the one
+    // that gets wiped (usually the bug you want)."
+    const name = signal("");
+    dispose = mount(
+      input({ oninput: () => {}, ...bind(name) }),
+      container,
+    );
+    expect(warn).not.toHaveBeenCalled();
+  });
+});
+
+describe("bindField() duplicate-handler warning (direction 1)", () => {
+  let warn: ReturnType<typeof vi.spyOn>;
+  beforeEach(() => {
+    warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  });
+  afterEach(() => {
+    warn.mockRestore();
+  });
+
+  it("warns when bindField's onchange is overwritten by a later handler", () => {
+    type Todo = { id: string; done: boolean };
+    const todos = signal<Todo[]>([{ id: "a", done: false }]);
+    const todo = () => todos.value[0]!;
+    dispose = mount(
+      input({
+        type: "checkbox",
+        ...bindField(todos, todo, "done", { as: "checkbox" }),
+        onchange: () => {},
+      }),
+      container,
+    );
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('"onchange"'),
+    );
+  });
+});
+
+describe("bindPath() duplicate-handler warning (direction 1)", () => {
+  let warn: ReturnType<typeof vi.spyOn>;
+  beforeEach(() => {
+    warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  });
+  afterEach(() => {
+    warn.mockRestore();
+  });
+
+  it("warns when bindPath's oninput is overwritten by a later handler", () => {
+    type User = { profile: { email: string } };
+    const user = signal<User>({ profile: { email: "" } });
+    dispose = mount(
+      input({
+        ...bindPath(user, ["profile", "email"]),
+        oninput: () => {},
+      }),
+      container,
+    );
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('"oninput"'),
+    );
   });
 });
