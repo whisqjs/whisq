@@ -16,11 +16,14 @@
     "access-shapes-canonical-doc",
     "accessor-boundaries-docs",
     "alpha-5-batch",
+    "aria-attribute-typing",
     "array-accepting-class-prop",
+    "bind-duplicate-handler-warning",
     "bindfield-dev-strict-mode",
     "bindfield-for-array-items",
     "bindpath-for-nested-records",
     "clarify-ref-accessor",
+    "component-accepts-function-child-return",
     "component-types-and-sheet-nested-selectors",
     "each-keyed-accessor-callback",
     "export-event-types",
@@ -28,11 +31,13 @@
     "full-app-template-canonical-shape",
     "hybrid-item-accessor-keyed-each",
     "match-api-clarity",
+    "mount-sandboxed",
     "partition-and-random-id-helpers",
     "persisted-signal",
     "persistedsignal-onschemafailure",
     "project-structure-conventions",
     "reactive-shapes-taxonomy",
+    "theme-duplicate-call-warning",
     "theme-sheet-ssr-guard"
   ]
 }
