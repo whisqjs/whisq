@@ -35,7 +35,7 @@ export const TodoItem = component((props: TodoItemProps) =>
     button(
       {
         class: s.removeBtn,
-        title: "Remove",
+        "aria-label": "Remove",
         onclick: () => removeTodo(props.todo.value.id),
       },
       "×",

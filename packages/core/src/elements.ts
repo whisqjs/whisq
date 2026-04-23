@@ -128,6 +128,17 @@ interface BaseProps {
   hidden?: ReactiveProp<boolean>;
   title?: ReactiveProp<string | undefined>;
   [key: `data-${string}`]: ReactiveProp<string | undefined>;
+  /**
+   * ARIA attributes. Value types match how aria reads in HTML — strings
+   * for enum-valued attrs (`aria-live: "polite"`), booleans for
+   * predicate-shaped attrs (`aria-expanded`, `aria-hidden`,
+   * `aria-pressed`). Booleans serialise to the strings `"true"` and
+   * `"false"`, matching the ARIA spec — `aria-expanded=""` is NOT
+   * equivalent to `aria-expanded="true"`, and this typed path routes
+   * through a dedicated branch in `applyProp` that handles that.
+   * `undefined` / `null` removes the attribute.
+   */
+  [key: `aria-${string}`]: ReactiveProp<string | boolean | undefined>;
 }
 
 // Shared form-control event bundle, generic over the control's element type
@@ -1168,6 +1179,17 @@ function applyProp(el: Element, key: string, value: unknown): void {
     (el as HTMLInputElement).disabled = Boolean(value);
   } else if (key === "hidden") {
     (el as HTMLElement).hidden = Boolean(value);
+  } else if (key.startsWith("aria-")) {
+    // ARIA attributes need string "true"/"false", not empty string — per
+    // the ARIA spec, `aria-expanded=""` is NOT equivalent to
+    // `aria-expanded="true"`. Route boolean and string values through
+    // String() which produces the correct serialisation; null / undefined
+    // still remove the attribute.
+    if (value == null) {
+      el.removeAttribute(key);
+    } else {
+      el.setAttribute(key, String(value));
+    }
   } else if (value === false || value == null) {
     el.removeAttribute(key);
   } else if (value === true) {
