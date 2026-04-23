@@ -8,6 +8,14 @@ import { signal, effect } from "./reactive.js";
 import type { WhisqNode } from "./elements.js";
 import { WhisqStructureError, describeValue } from "./dev-errors.js";
 
+/**
+ * Shapes a component's setup can return. A plain `WhisqNode` is the
+ * original contract. A zero-arg function (e.g. the return value of
+ * `match()` / `when()` / a bare `() => div(...)`) is lifted at the
+ * runtime boundary — see WHISQ-121.
+ */
+type ComponentSetupReturn = WhisqNode | (() => unknown);
+
 type CleanupFn = () => void;
 
 // ── Context (provide/inject) ───────────────────────────────────────────────
@@ -67,7 +75,7 @@ export interface ComponentDef<P = {}> {
  * ```
  */
 export function component<P extends Record<string, any> = {}>(
-  setup: (props: P) => WhisqNode,
+  setup: (props: P) => ComponentSetupReturn,
 ): ComponentDef<P> {
   const def = ((props: P) => {
     const parentCtx = contextStack[contextStack.length - 1] ?? null;
@@ -80,12 +88,19 @@ export function component<P extends Record<string, any> = {}>(
     };
 
     contextStack.push(ctx);
-    let node: WhisqNode;
+    let raw: ComponentSetupReturn;
     try {
-      node = setup(props);
+      raw = setup(props);
     } finally {
       contextStack.pop();
     }
+
+    // WHISQ-121: setup may return a function (the shape match() / when() /
+    // an ad-hoc `() => div(...)` produces). Lift it so callers don't need
+    // a sacrificial wrapper div whose only job is to host the function
+    // child.
+    const node: WhisqNode =
+      typeof raw === "function" ? liftFunctionChild(raw) : raw;
 
     if (process.env.NODE_ENV !== "production") {
       if (
@@ -96,9 +111,10 @@ export function component<P extends Record<string, any> = {}>(
       ) {
         throw new WhisqStructureError({
           element: "component",
-          expected: "setup to return a WhisqNode (an element call like `div(...)`)",
-          received: describeValue(node),
-          hint: "Return the root element from your setup function: `return div(...)`. Bare strings, numbers, arrays, and null aren't valid component roots — wrap them in an element.",
+          expected:
+            "setup to return a WhisqNode (an element call like `div(...)`) or a function child (the shape `match()` / `when()` produces)",
+          received: describeValue(raw),
+          hint: "Return the root element from your setup function: `return div(...)`. A `match()` / `when()` return works directly — no wrapper div needed. Bare strings, numbers, arrays, and null aren't valid component roots — wrap them in an element or a function.",
         });
       }
     }
@@ -123,6 +139,89 @@ export function component<P extends Record<string, any> = {}>(
 
   def.__whisq_component = true;
   return def;
+}
+
+/**
+ * Wrap a function-child return from setup in a minimal WhisqNode that
+ * manages rendering the function's result between start/end markers on a
+ * DocumentFragment. Same pattern as `errorBoundary` and keyed `each` —
+ * markers survive fragment-insertion and stay in the real parent after
+ * mount, so the effect can re-render in place across source changes.
+ *
+ * Scope: handles the common `match()` / `when()` / `() => div(...)` case
+ * where the function returns a WhisqNode / string / number / null. Nested
+ * function returns (`() => () => x`) are rejected in dev so callers don't
+ * build unexpectedly-deep reactive trees at the component root — if you
+ * need that, wrap in an element.
+ */
+function liftFunctionChild(fn: () => unknown): WhisqNode {
+  const startMarker = document.createComment("whisq-c-start");
+  const endMarker = document.createComment("whisq-c-end");
+  const fragment = document.createDocumentFragment();
+  fragment.appendChild(startMarker);
+  fragment.appendChild(endMarker);
+
+  let currentNodes: Node[] = [];
+  let currentDispose: (() => void) | null = null;
+
+  function clearCurrent(): void {
+    if (currentDispose) {
+      currentDispose();
+      currentDispose = null;
+    }
+    for (const n of currentNodes) n.parentNode?.removeChild(n);
+    currentNodes = [];
+  }
+
+  const effectDispose = effect(() => {
+    clearCurrent();
+    const result = fn();
+    const parent = startMarker.parentNode;
+    if (!parent) return;
+    if (result == null || result === false || result === true) return;
+
+    if (typeof result === "string" || typeof result === "number") {
+      const node = document.createTextNode(String(result));
+      parent.insertBefore(node, endMarker);
+      currentNodes = [node];
+      return;
+    }
+
+    if (
+      typeof result === "object" &&
+      result !== null &&
+      "__whisq" in result
+    ) {
+      const wn = result as WhisqNode;
+      parent.insertBefore(wn.el, endMarker);
+      currentNodes = [wn.el];
+      currentDispose = () => wn.dispose();
+      return;
+    }
+
+    if (process.env.NODE_ENV !== "production") {
+      throw new WhisqStructureError({
+        element: "component",
+        expected:
+          "function-child to yield a WhisqNode / string / number / null",
+        received: describeValue(result),
+        hint:
+          typeof result === "function"
+            ? "Nested function children aren't supported as a component root — wrap in an element."
+            : "Wrap arrays / plain objects in an element function like `div(...)`.",
+      });
+    }
+  });
+
+  return {
+    __whisq: true,
+    el: fragment,
+    disposers: [effectDispose, clearCurrent],
+    dispose() {
+      effectDispose();
+      clearCurrent();
+    },
+  };
 }
 
 // ── Lifecycle Hooks ─────────────────────────────────────────────────────────

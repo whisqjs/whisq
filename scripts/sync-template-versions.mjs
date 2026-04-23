@@ -1,12 +1,18 @@
 #!/usr/bin/env node
-// Rewrites every `@whisq/*` dep inside
-// `packages/create-whisq/src/templates/**/package.json.tmpl`
-// to match the current workspace version (the one in `packages/core/package.json`).
+// Rewrites every `@whisq/*` dep in two places to match the current workspace
+// version (the one in `packages/core/package.json`):
+//
+//   1. `packages/create-whisq/src/templates/**/package.json.tmpl` — the
+//      templates the CLI scaffolds from.
+//   2. `examples/*/package.json` — StackBlitz-runnable example apps that
+//      must pin to the latest release so `npm install` on StackBlitz
+//      resolves to something that works.
 //
 // Caret range is preserved. `workspace:*` specs are left alone.
-// Run after version bumps so scaffolded apps pick up the new release.
+// Run after version bumps so scaffolded apps + examples pick up the new
+// release.
 
-import { readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -21,18 +27,31 @@ if (!targetVersion) {
   process.exit(1);
 }
 
-function walk(dir, out = []) {
+function walk(dir, matcher, out = []) {
   for (const entry of readdirSync(dir)) {
     const full = join(dir, entry);
     const s = statSync(full);
-    if (s.isDirectory()) walk(full, out);
-    else if (entry === "package.json.tmpl") out.push(full);
+    if (s.isDirectory()) {
+      // Skip node_modules inside examples — they can exist after a local
+      // `npm install` and we don't want to rewrite vendored files.
+      if (entry === "node_modules" || entry === "dist") continue;
+      walk(full, matcher, out);
+    } else if (matcher(entry, full)) {
+      out.push(full);
+    }
   }
   return out;
 }
 
 const templatesDir = join(root, "packages", "create-whisq", "src", "templates");
-const files = walk(templatesDir);
+const examplesDir = join(root, "examples");
+
+const files = [
+  ...walk(templatesDir, (name) => name === "package.json.tmpl"),
+  ...(existsSync(examplesDir)
+    ? walk(examplesDir, (name) => name === "package.json")
+    : []),
+];
 let changed = 0;
 
 for (const file of files) {
@@ -63,4 +82,6 @@ for (const file of files) {
   }
 }
 
-console.log(`Synced ${changed}/${files.length} template(s) to @whisq/*@${targetVersion}.`);
+console.log(
+  `Synced ${changed}/${files.length} template/example file(s) to @whisq/*@${targetVersion}.`,
+);

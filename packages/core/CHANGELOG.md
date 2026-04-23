@@ -1,5 +1,107 @@
 # @whisq/core
 
+## 0.1.0-alpha.9
+
+### Minor Changes
+
+- defc7eb: Typed `aria-*` attributes on every element. `BaseProps` now accepts `[key: \`aria-${string}\`]: ReactiveProp<string | boolean | undefined>`— mirrors the existing`data-\*` pattern but with a wider value type because ARIA uses both enum-string attrs (`aria-live: "polite"`) and predicate-boolean attrs (`aria-expanded`, `aria-hidden`, `aria-pressed`).
+
+  ```ts
+  // Before: typed props rejected aria-label; workaround was `title="Remove"`
+  // (correct for tooltips, compromised for screen readers).
+  button({ "aria-label": "Remove" }, "×");
+
+  // Reactive ARIA also works:
+  button({ "aria-expanded": () => menuOpen.value }, "menu");
+  div({ "aria-live": "polite", "aria-atomic": true }, () => status.value);
+  ```
+
+  Also fixes the **boolean serialisation bug** this exposed: the generic boolean-attribute branch in `applyProp` wrote `aria-expanded=""` for `true`, which is **invalid** per the ARIA spec — `aria-expanded=""` is not equivalent to `aria-expanded="true"`. A dedicated `aria-*` branch now serialises `true`/`false` to the strings `"true"` / `"false"`, and `undefined`/`null` still removes the attribute. String values pass through unchanged.
+
+  Runtime cost: one `startsWith("aria-")` check per prop. Bundle size: 5.67 KB of 6 KB budget (+ ~20 B).
+
+  Discovered during WHISQ-124 smoke-test; the `examples/template-todo/` remove button now uses `aria-label="Remove"` instead of the previous `title="Remove"` workaround.
+
+  Closes WHISQ-128.
+
+- c8f2bec: Dev-only warning when spreading `bind()` / `bindField()` / `bindPath()` then overwriting one of its event handlers. Closes the production-bug window Claude's alpha.8 feedback called out as the top concern:
+
+  ```ts
+  // Before: silently dropped bind's oninput, no warning.
+  input({
+    ...bind(draft),
+    oninput: (e) => track(e), // overwrites bind's oninput
+  });
+
+  // Now (in dev): console.warn with the tag, event name, and a fix hint.
+  ```
+
+  Mechanism — the three bind helpers attach a symbol-keyed manifest of the handlers they declared to their return objects. Object spread copies symbol-keyed own properties, so the manifest survives into the final props. The element builder checks "for each declared handler, is the current prop handler still the one I declared?" On mismatch, `console.warn` (dev only; zero cost in production).
+
+  **Known limitation.** Only catches _direction 1_ — spread-first, user-handler-second. _Direction 2_ (user handler first, `...bind(sig)` spread on top) cannot be detected from final props alone: by the time the element builder sees `props`, the user's original handler is gone without a trace. The warning message steers users toward the safer convention: spread bind LAST so it's your own handler that visibly "wins", making the collision obvious.
+
+  Closes WHISQ-120.
+
+- e6d59c4: `component()`'s setup function can now return a **function child** directly — the shape `match()` / `when()` / an ad-hoc `() => div(...)` produce. Previously, a component whose whole job was to render one of several branches needed a sacrificial wrapper `div` whose only purpose was to host the function child:
+
+  ```ts
+  // Before — wrapper div has no job other than holding match()
+  const Screen = component(() =>
+    div(
+      match(
+        [() => view.value === "loading", () => p("loading")],
+        [() => view.value === "data", () => DataView({})],
+        () => p("empty"),
+      ),
+    ),
+  );
+
+  // Now — match() is the component root directly
+  const Screen = component(() =>
+    match(
+      [() => view.value === "loading", () => p("loading")],
+      [() => view.value === "data", () => DataView({})],
+      () => p("empty"),
+    ),
+  );
+  ```
+
+  Works for any zero-arg function return — `when()`, `match()`, or a plain `() => someNode`.
+
+  Mechanism is the same fragment + start/end marker pattern `errorBoundary` and keyed `each` already use internally: a fragment holds markers that survive insertion into the real parent, and an effect renders the function's result between them on every source change. `onMount` / `onCleanup` hooks registered inside setup continue to fire as expected. Branch switches dispose the previous `WhisqNode` before inserting the next — no node leaks.
+
+  Backwards compatible. The widened setup signature is `(props: P) => WhisqNode | (() => unknown)`; existing `component(() => div(...))` code is unaffected. Dev-mode `WhisqStructureError` messages now mention both accepted shapes.
+
+  Bundle size: `@whisq/core` grows ~150 B gzipped (5.5 → 5.65 KB). The size-limit budget bumps from 5.5 KB to 6.0 KB to absorb this cost with room to grow, documented in `packages/core/.size-limit.cjs`.
+
+  Closes WHISQ-121. The docs-side companion (whisqjs/whisq.dev#162) will need an update once the `/api/match/` page can point at "match() works directly as a component root" as the idiom.
+
+- 75d2d8e: Dev-mode warning on duplicate `theme()` calls. Completes the alpha.7 `theme()` saga started by #99 / #105 (docs + SSR guard). Catches the failure mode Claude's alpha.8 feedback flagged: a multi-file project that imports two styles files and silently wipes the first theme's variables.
+
+  ```ts
+  // styles.ts — app's primary theme
+  import { theme } from "@whisq/core";
+  theme({ color: { primary: "#4386FB" } });
+
+  // another styles.ts elsewhere in the graph — accidentally imported
+  import { theme } from "@whisq/core";
+  theme({ color: { primary: "#ffffff" } });
+  // Dev: console.warn names the conflict; production is silent.
+  ```
+
+  New optional `silent?: boolean` on the `theme()` signature suppresses the warning for legitimate second calls (theme-switching toggles):
+
+  ```ts
+  // Runtime theme switch — intentional; silent: true says "don't warn"
+  theme(darkTokens, { silent: true });
+  ```
+
+  Detection is DOM-based — a `getElementById("whisq-style-whisq-theme")` check. Production builds strip the entire guard via the existing `NODE_ENV !== "production"` pattern, so there's no runtime cost in shipped code. Each `theme()` is still last-call-wins: the warning doesn't change injection semantics, only surfaces when a second call would replace an existing block.
+
+  Exported `ThemeOptions` type for callers who type their wrapper helpers.
+
+  Closes WHISQ-122.
+
 ## 0.1.0-alpha.8
 
 ### Minor Changes

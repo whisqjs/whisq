@@ -1,6 +1,6 @@
 {
   "name": "@whisq/core",
-  "version": "0.1.0-alpha.8",
+  "version": "0.1.0-alpha.9",
   "description": "The AI-native JavaScript framework that senses what you mean — reactive signals, templates, and components",
   "type": "module",
   "main": "./dist/index.js",

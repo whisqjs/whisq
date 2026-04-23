@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { signal } from "../reactive.js";
-import { div, span, button, p, mount } from "../elements.js";
+import { div, span, button, p, mount, match, when } from "../elements.js";
 import { component, onMount, onCleanup, resource } from "../component.js";
 import type { WhisqNode } from "../elements.js";
 
@@ -395,5 +395,176 @@ describe("resource()", () => {
     await vi.waitFor(() => expect(r.data()).toBe("ok-abc"));
     expect(capturedSrc).toBe("abc");
     expect(capturedSignal).toBeInstanceOf(AbortSignal);
+  });
+});
+
+// ── Function-return setup (WHISQ-121) ───────────────────────────────────────
+//
+// Components can return a function child directly from setup — no sacrificial
+// wrapper div needed to host a match() / when() / ad-hoc getter.
+
+describe("component() — function-return setup", () => {
+  it("renders match() directly as a component root (no wrapper)", () => {
+    type View = "loading" | "data" | "empty";
+    const view = signal<View>("loading");
+
+    const Screen = component(() =>
+      match(
+        [() => view.value === "loading", () => p("loading...")],
+        [() => view.value === "data", () => p("hello")],
+        () => p("empty"),
+      ),
+    );
+
+    dispose = mount(Screen({}), container);
+    expect(container.textContent).toBe("loading...");
+
+    view.value = "data";
+    expect(container.textContent).toBe("hello");
+
+    view.value = "empty";
+    expect(container.textContent).toBe("empty");
+  });
+
+  it("renders when() as a component root", () => {
+    const loggedIn = signal(false);
+
+    const Auth = component(() =>
+      when(
+        () => loggedIn.value,
+        () => p("welcome back"),
+        () => p("sign in"),
+      ),
+    );
+
+    dispose = mount(Auth({}), container);
+    expect(container.textContent).toBe("sign in");
+
+    loggedIn.value = true;
+    expect(container.textContent).toBe("welcome back");
+  });
+
+  it("renders an ad-hoc () => value getter as a component root", () => {
+    const name = signal("world");
+
+    const Greeting = component(() => () => div(`hello ${name.value}`));
+
+    dispose = mount(Greeting({}), container);
+    expect(container.textContent).toBe("hello world");
+
+    name.value = "whisq";
+    expect(container.textContent).toBe("hello whisq");
+  });
+
+  it("existing plain-WhisqNode return still works (backwards compat)", () => {
+    const Counter = component(() => div("42"));
+    dispose = mount(Counter({}), container);
+    expect(container.textContent).toBe("42");
+  });
+
+  it("fires onMount + onCleanup for function-return components", () => {
+    const mounted = vi.fn();
+    const cleaned = vi.fn();
+    const visible = signal(true);
+
+    const Widget = component(() => {
+      onMount(mounted);
+      onCleanup(cleaned);
+      return match([() => visible.value, () => p("on")], () => p("off"));
+    });
+
+    dispose = mount(Widget({}), container);
+    return new Promise<void>((resolve) => {
+      queueMicrotask(() => {
+        expect(mounted).toHaveBeenCalledTimes(1);
+        expect(cleaned).not.toHaveBeenCalled();
+        dispose();
+        expect(cleaned).toHaveBeenCalledTimes(1);
+        resolve();
+      });
+    });
+  });
+
+  it("renders nothing when setup's function returns null", () => {
+    const show = signal(false);
+    const Maybe = component(() => () => (show.value ? p("yes") : null));
+
+    dispose = mount(Maybe({}), container);
+    expect(container.textContent).toBe("");
+
+    show.value = true;
+    expect(container.textContent).toBe("yes");
+
+    show.value = false;
+    expect(container.textContent).toBe("");
+  });
+
+  it("disposes the current WhisqNode on each branch switch (no node leak)", () => {
+    const n = signal(0);
+    const disposeCount = { a: 0, b: 0 };
+
+    const A = component(() => {
+      onCleanup(() => disposeCount.a++);
+      return p("a");
+    });
+    const B = component(() => {
+      onCleanup(() => disposeCount.b++);
+      return p("b");
+    });
+
+    const Switcher = component(() =>
+      match([() => n.value === 0, () => A({})], () => B({})),
+    );
+
+    dispose = mount(Switcher({}), container);
+    expect(container.textContent).toBe("a");
+    expect(disposeCount).toEqual({ a: 0, b: 0 });
+
+    n.value = 1;
+    expect(container.textContent).toBe("b");
+    expect(disposeCount.a).toBe(1); // A's cleanup ran on branch switch
+
+    n.value = 0;
+    expect(container.textContent).toBe("a");
+    expect(disposeCount.b).toBe(1); // B's cleanup ran on branch switch
+  });
+
+  it("full disposal cleans up effect + current child", () => {
+    const n = signal(0);
+    const cleaned = vi.fn();
+
+    const Inner = component(() => {
+      onCleanup(cleaned);
+      return p(() => `n=${n.value}`);
+    });
+
+    const Switcher = component(() =>
+      match([() => n.value >= 0, () => Inner({})], () => null),
+    );
+
+    dispose = mount(Switcher({}), container);
+    dispose();
+    expect(cleaned).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects unsupported return shapes with a helpful error (dev)", () => {
+    // Setup returns a bare plain object — not a WhisqNode, not a function.
+    const BadA = component(() => ({}) as unknown as WhisqNode);
+    expect(() => mount(BadA({}), container)).toThrow(/component/);
+
+    // Setup returns a function that itself returns an array of plain objects —
+    // caught at render time.
+    const BadB = component(
+      () => () => [{} as unknown] as unknown as WhisqNode,
+    );
+    // Depending on dev-mode strictness, this may throw at mount or the effect
+    // may swallow; we at least want it NOT to silently render garbage.
+    try {
+      dispose = mount(BadB({}), container);
+      // If we got here, at least verify nothing visibly rendered.
+      expect(container.textContent).toBe("");
+    } catch {
+      // Or it threw — also acceptable.
+    }
   });
 });

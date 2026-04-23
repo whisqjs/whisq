@@ -15,6 +15,7 @@ import { effect, isSignal, setEffectErrorHandler } from "./reactive.js";
 import { reconcileKeyed, type KeyedEntry } from "./reconcile.js";
 import type { Ref } from "./ref.js";
 import { WhisqStructureError, describeValue } from "./dev-errors.js";
+import { WHISQ_BIND_SOURCES, type BindSources } from "./bind-sentinel.js";
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -127,6 +128,17 @@ interface BaseProps {
   hidden?: ReactiveProp<boolean>;
   title?: ReactiveProp<string | undefined>;
   [key: `data-${string}`]: ReactiveProp<string | undefined>;
+  /**
+   * ARIA attributes. Value types match how aria reads in HTML — strings
+   * for enum-valued attrs (`aria-live: "polite"`), booleans for
+   * predicate-shaped attrs (`aria-expanded`, `aria-hidden`,
+   * `aria-pressed`). Booleans serialise to the strings `"true"` and
+   * `"false"`, matching the ARIA spec — `aria-expanded=""` is NOT
+   * equivalent to `aria-expanded="true"`, and this typed path routes
+   * through a dedicated branch in `applyProp` that handles that.
+   * `undefined` / `null` removes the attribute.
+   */
+  [key: `aria-${string}`]: ReactiveProp<string | boolean | undefined>;
 }
 
 // Shared form-control event bundle, generic over the control's element type
@@ -245,6 +257,14 @@ export function h(
 ): WhisqNode {
   const el = document.createElement(tag);
   const disposers: (() => void)[] = [];
+
+  // Dev-only: detect when a spread of bind()/bindField()/bindPath() was
+  // followed by an explicit overwrite of one of its event handlers.
+  // See WHISQ-120 + packages/core/src/bind-sentinel.ts for the mechanism
+  // (a symbol-keyed manifest carried through object spread).
+  if (process.env.NODE_ENV !== "production" && props) {
+    checkOverwrittenBindHandlers(tag, props);
+  }
 
   // Apply props
   if (props) {
@@ -1073,6 +1093,33 @@ function isPlainStyleObject(value: unknown): value is StyleObject {
   return proto === Object.prototype || proto === null;
 }
 
+function checkOverwrittenBindHandlers(
+  tag: string,
+  props: Record<string, unknown>,
+): void {
+  // The sentinel is a non-enumerable property under a symbol key; a plain
+  // `in` check hits it without polluting any Object.entries iteration.
+  const sources = (props as { [k: symbol]: unknown })[WHISQ_BIND_SOURCES] as
+    | BindSources
+    | undefined;
+  if (!sources) return;
+  for (const key of Object.keys(sources)) {
+    const declared = sources[key];
+    const current = (props as Record<string, unknown>)[key];
+    if (current !== declared) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[whisq] duplicate handler for "${key}" on <${tag}>: ` +
+          `the handler returned by bind()/bindField()/bindPath() was overwritten. ` +
+          `JS object spread is last-key-wins — your explicit "${key}" silently dropped the bind handler. ` +
+          `To keep both, chain them manually: ` +
+          `{ ...bind(sig), ${key}: (e) => { /* your code */ /* then call bind's handler yourself */ } }, ` +
+          `or spread bind LAST so your handler is the one that gets wiped (usually the bug you want).`,
+      );
+    }
+  }
+}
+
 function joinClassArray(sources: readonly ClassArraySource[]): string {
   const parts: string[] = [];
   for (const src of sources) {
@@ -1132,6 +1179,17 @@ function applyProp(el: Element, key: string, value: unknown): void {
     (el as HTMLInputElement).disabled = Boolean(value);
   } else if (key === "hidden") {
     (el as HTMLElement).hidden = Boolean(value);
+  } else if (key.startsWith("aria-")) {
+    // ARIA attributes need string "true"/"false", not empty string — per
+    // the ARIA spec, `aria-expanded=""` is NOT equivalent to
+    // `aria-expanded="true"`. Route boolean and string values through
+    // String() which produces the correct serialisation; null / undefined
+    // still remove the attribute.
+    if (value == null) {
+      el.removeAttribute(key);
+    } else {
+      el.setAttribute(key, String(value));
+    }
   } else if (value === false || value == null) {
     el.removeAttribute(key);
   } else if (value === true) {

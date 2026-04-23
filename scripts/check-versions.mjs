@@ -1,8 +1,11 @@
 #!/usr/bin/env node
 // Verifies version consistency across the monorepo:
 //   1. Every `@whisq/*` package AND `create-whisq` in `packages/*` share the same version.
-//   2. Every `@whisq/*` reference inside `packages/create-whisq/src/templates/**/package.json.tmpl`
-//      resolves to that same version. Allowed forms: "X.Y.Z", "^X.Y.Z", "~X.Y.Z", "workspace:*".
+//   2. Every `@whisq/*` reference inside
+//      `packages/create-whisq/src/templates/**/package.json.tmpl` resolves to
+//      that same version. Allowed forms: "X.Y.Z", "^X.Y.Z", "~X.Y.Z", "workspace:*".
+//   3. Every `@whisq/*` reference inside `examples/*/package.json` (real
+//      runnable StackBlitz templates) follows the same rule.
 //
 // `create-whisq` is included so the scaffolder and the runtime packages
 // always release together. Enforced by the `fixed` group in
@@ -10,7 +13,7 @@
 //
 // Exits non-zero on any drift. Run in CI and as a gate inside /release.
 
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -46,12 +49,16 @@ for (const pkg of releasedPackages) {
   }
 }
 
-function walk(dir, out = []) {
+function walk(dir, matcher, out = []) {
   for (const entry of readdirSync(dir)) {
     const full = join(dir, entry);
     const s = statSync(full);
-    if (s.isDirectory()) walk(full, out);
-    else if (entry === "package.json.tmpl") out.push(full);
+    if (s.isDirectory()) {
+      if (entry === "node_modules" || entry === "dist") continue;
+      walk(full, matcher, out);
+    } else if (matcher(entry, full)) {
+      out.push(full);
+    }
   }
   return out;
 }
@@ -59,9 +66,20 @@ function walk(dir, out = []) {
 const templatesDir = join(root, "packages", "create-whisq", "src", "templates");
 let templateFiles = [];
 try {
-  templateFiles = walk(templatesDir);
+  templateFiles = walk(templatesDir, (name) => name === "package.json.tmpl");
 } catch {
   errors.push(`Templates directory not found at ${relative(root, templatesDir)}`);
+}
+
+// Examples dir is optional — not every repo snapshot has runnable examples.
+const examplesDir = join(root, "examples");
+let exampleFiles = [];
+if (existsSync(examplesDir)) {
+  try {
+    exampleFiles = walk(examplesDir, (name) => name === "package.json");
+  } catch {
+    errors.push(`Examples directory walk failed at ${relative(root, examplesDir)}`);
+  }
 }
 
 const validSpec = (spec) => {
@@ -70,13 +88,13 @@ const validSpec = (spec) => {
   return stripped === referenceVersion;
 };
 
-for (const file of templateFiles) {
+function checkFile(file) {
   let pkg;
   try {
     pkg = JSON.parse(readFileSync(file, "utf8"));
   } catch (e) {
     errors.push(`${relative(root, file)} is not valid JSON: ${e.message}`);
-    continue;
+    return;
   }
   for (const section of ["dependencies", "devDependencies", "peerDependencies"]) {
     const deps = pkg[section] ?? {};
@@ -91,6 +109,9 @@ for (const file of templateFiles) {
   }
 }
 
+for (const file of templateFiles) checkFile(file);
+for (const file of exampleFiles) checkFile(file);
+
 if (errors.length > 0) {
   console.error("Version consistency check failed:");
   for (const err of errors) console.error(`  - ${err}`);
@@ -98,5 +119,5 @@ if (errors.length > 0) {
 }
 
 console.log(
-  `Version consistency OK — ${releasedPackages.length} released packages at ${referenceVersion}, ${templateFiles.length} template(s) aligned.`,
+  `Version consistency OK — ${releasedPackages.length} released packages at ${referenceVersion}, ${templateFiles.length} template(s) + ${exampleFiles.length} example(s) aligned.`,
 );
