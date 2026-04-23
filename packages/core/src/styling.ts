@@ -300,6 +300,19 @@ type ThemeTokens = Record<
 >;
 
 /**
+ * Options for `theme()`.
+ */
+export interface ThemeOptions {
+  /**
+   * Suppress the dev-mode "theme() called twice" warning for this call.
+   * Set when a second call is intentional — for example, a theme-switching
+   * toggle `theme(darkTokens, { silent: true })`. Production doesn't emit
+   * the warning regardless of this option.
+   */
+  silent?: boolean;
+}
+
+/**
  * Define CSS custom properties (design tokens) at :root level.
  *
  * ```ts
@@ -359,8 +372,32 @@ type ThemeTokens = Record<
  *   call is a no-op. The CSS variables won't appear in server-rendered
  *   HTML; attach theme tokens in a `<style>` block in your SSR template
  *   until a dedicated server renderer ships.
+ * - **Dev warning on accidental duplicates.** In dev, a second `theme()`
+ *   call with an existing whisq-theme block in the DOM emits a
+ *   `console.warn` — the bug this catches is the multi-file project that
+ *   imports two styles files and silently wipes the first theme. Pass
+ *   `{ silent: true }` when the second call is intentional (e.g. a
+ *   theme-switching toggle).
  */
-export function theme(tokens: ThemeTokens): void {
+export function theme(tokens: ThemeTokens, options?: ThemeOptions): void {
+  // Dev-only: detect accidental duplicate calls by checking whether a
+  // whisq-theme style block is already in the DOM. The check is cheap
+  // (one getElementById) and runs before injection, so production builds
+  // strip it via the NODE_ENV guard without changing behavior.
+  if (
+    process.env.NODE_ENV !== "production" &&
+    !options?.silent &&
+    typeof document !== "undefined" &&
+    document.getElementById("whisq-style-whisq-theme") !== null
+  ) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      "[whisq] theme() called a second time — the existing <style id=\"whisq-style-whisq-theme\"> block will be replaced (last-call-wins). " +
+        "If this is intentional (e.g. a theme-switching toggle), pass { silent: true } to suppress this warning. " +
+        "If unexpected, check whether two modules on your import graph both call theme() at module scope.",
+    );
+  }
+
   let cssText = ":root{";
 
   for (const [group, value] of Object.entries(tokens)) {
