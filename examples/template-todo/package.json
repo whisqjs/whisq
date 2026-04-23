@@ -10,7 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@whisq/core": "^0.1.0-alpha.8"
+    "@whisq/core": "^0.1.0-alpha.9"
   },
   "devDependencies": {
     "typescript": "^5.7.0",

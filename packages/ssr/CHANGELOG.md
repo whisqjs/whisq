@@ -1,5 +1,15 @@
 # @whisq/ssr
 
+## 0.1.0-alpha.9
+
+### Patch Changes
+
+- Updated dependencies [defc7eb]
+- Updated dependencies [c8f2bec]
+- Updated dependencies [e6d59c4]
+- Updated dependencies [75d2d8e]
+  - @whisq/core@0.1.0-alpha.9
+
 ## 0.1.0-alpha.8
 
 ### Patch Changes

@@ -1,6 +1,6 @@
 {
   "name": "@whisq/router",
-  "version": "0.1.0-alpha.8",
+  "version": "0.1.0-alpha.9",
   "description": "Signal-based router for Whisq applications",
   "type": "module",
   "main": "./dist/index.js",
