@@ -33,7 +33,10 @@ CLAUDE.md
 
 # internal drafts
 draft/
-examples/
+# examples/ is gitignored by default to keep local experiments out of the
+# tree; committed example projects need an explicit un-ignore below.
+examples/*
+!examples/template-todo/
 
 # website (moved to whisqjs/whisq.dev)
 website/
