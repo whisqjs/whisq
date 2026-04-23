@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { sheet, styles, cx, rcx, theme } from "../styling";
 import { signal } from "../reactive";
 
@@ -264,13 +264,93 @@ describe("theme()", () => {
   });
 
   it("replaces existing theme on second call", () => {
+    // Second call triggers the dup-warning (WHISQ-122) by default; use
+    // silent:true here since we're testing replacement semantics, not the
+    // warning itself.
     theme({ color: { primary: "red" } });
-    theme({ color: { primary: "blue" } });
+    theme({ color: { primary: "blue" } }, { silent: true });
 
     const styleTags = document.querySelectorAll("#whisq-style-whisq-theme");
     expect(styleTags.length).toBe(1);
     expect(styleTags[0].textContent).toContain("--color-primary:blue");
     expect(styleTags[0].textContent).not.toContain("--color-primary:red");
+  });
+});
+
+// ── Duplicate-call warning (WHISQ-122) ──────────────────────────────────────
+//
+// Dev-mode warning on second+ theme() calls catches the accidental-
+// overwrite failure mode Claude flagged in alpha.8 feedback (import one
+// styles.ts file, later import another that also calls theme(), last call
+// silently wipes the first). Detection is DOM-based (existing whisq-
+// style-whisq-theme element), so the beforeEach that clears that element
+// naturally resets state between tests — no counter to maintain.
+
+describe("theme() — duplicate-call warning", () => {
+  let warn: ReturnType<typeof vi.spyOn>;
+  beforeEach(() => {
+    warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  });
+
+  it("does NOT warn on first theme() call", () => {
+    theme({ color: { primary: "red" } });
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("warns on second theme() call in dev (default)", () => {
+    theme({ color: { primary: "red" } });
+    theme({ color: { primary: "blue" } });
+    expect(warn).toHaveBeenCalledTimes(1);
+    const msg = warn.mock.calls[0]![0] as string;
+    expect(msg).toContain("theme()");
+    expect(msg).toMatch(/replaces?|last-call-wins|duplicate/i);
+  });
+
+  it("warns again on third call (persistent, not just once)", () => {
+    theme({ color: { primary: "a" } });
+    theme({ color: { primary: "b" } });
+    theme({ color: { primary: "c" } });
+    expect(warn).toHaveBeenCalledTimes(2);
+  });
+
+  it("suppresses the warning when silent: true is passed", () => {
+    theme({ color: { primary: "red" } });
+    theme({ color: { primary: "blue" } }, { silent: true });
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("warns in dev even if the first call used silent: true", () => {
+    // silent applies only to THIS call. A subsequent call still warns
+    // against whatever style tag exists — silent doesn't disable detection
+    // globally.
+    theme({ color: { primary: "red" } }, { silent: true });
+    theme({ color: { primary: "blue" } });
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it("does NOT warn in production", () => {
+    const originalEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = "production";
+    try {
+      theme({ color: { primary: "red" } });
+      theme({ color: { primary: "blue" } });
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      process.env.NODE_ENV = originalEnv;
+    }
+  });
+
+  it("does NOT warn in SSR (no document)", () => {
+    const originalDocument = globalThis.document;
+    // @ts-expect-error intentional delete to simulate SSR
+    delete (globalThis as { document?: Document }).document;
+    try {
+      theme({ color: { primary: "red" } });
+      theme({ color: { primary: "blue" } });
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      (globalThis as { document?: Document }).document = originalDocument;
+    }
   });
 });
 

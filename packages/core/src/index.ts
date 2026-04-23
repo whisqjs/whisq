@@ -116,6 +116,7 @@ export type { Ref, ElementRef } from "./ref.js";
 
 // Styling
 export { sheet, styles, cx, rcx, sx, theme } from "./styling.js";
+export type { ThemeOptions } from "./styling.js";
 export type { StyleObject } from "./elements.js";
 
 // Dev-mode diagnostics
