@@ -459,3 +459,91 @@ describe("mount()", () => {
     expect(container.textContent).toBe("");
   });
 });
+
+// ── aria-* attribute typing + correct boolean serialisation (WHISQ-128) ─────
+
+describe("aria-* attributes", () => {
+  it("applies a static string aria-label", () => {
+    const node = button({ "aria-label": "Close" }, "×");
+    dispose = mount(node, container);
+    const el = container.firstElementChild as HTMLElement;
+    expect(el.getAttribute("aria-label")).toBe("Close");
+  });
+
+  it("serialises boolean aria-* values as the strings 'true' / 'false'", () => {
+    // ARIA spec: `aria-expanded="true"` is the correct shape. The generic
+    // boolean-attribute branch in applyProp sets `key=""` for `value === true`,
+    // which is invalid for aria — empty string is NOT equivalent to "true" per
+    // the ARIA spec.
+    const expanded = button({ "aria-expanded": true }, "open");
+    dispose = mount(expanded, container);
+    expect(
+      (container.firstElementChild as HTMLElement).getAttribute("aria-expanded"),
+    ).toBe("true");
+  });
+
+  it("serialises boolean aria-expanded: false as the string 'false' (not removal)", () => {
+    const collapsed = button({ "aria-expanded": false }, "closed");
+    dispose = mount(collapsed, container);
+    expect(
+      (container.firstElementChild as HTMLElement).getAttribute("aria-expanded"),
+    ).toBe("false");
+  });
+
+  it("applies a reactive aria-hidden that toggles across renders", () => {
+    const hidden = signal(true);
+    const node = div({ "aria-hidden": () => hidden.value }, "region");
+    dispose = mount(node, container);
+    const el = container.firstElementChild as HTMLElement;
+
+    expect(el.getAttribute("aria-hidden")).toBe("true");
+
+    hidden.value = false;
+    expect(el.getAttribute("aria-hidden")).toBe("false");
+  });
+
+  it("removes aria-* when the value is undefined", () => {
+    const current = signal<string | undefined>("Loading…");
+    const node = div({ "aria-live": () => current.value }, "status");
+    dispose = mount(node, container);
+    const el = container.firstElementChild as HTMLElement;
+
+    expect(el.getAttribute("aria-live")).toBe("Loading…");
+
+    current.value = undefined;
+    expect(el.hasAttribute("aria-live")).toBe(false);
+
+    current.value = "polite";
+    expect(el.getAttribute("aria-live")).toBe("polite");
+  });
+
+  it("works with a reactive getter that returns a boolean (aria-pressed)", () => {
+    const pressed = signal(false);
+    const node = button(
+      { "aria-pressed": () => pressed.value },
+      "toggle",
+    );
+    dispose = mount(node, container);
+    const el = container.firstElementChild as HTMLElement;
+
+    expect(el.getAttribute("aria-pressed")).toBe("false");
+    pressed.value = true;
+    expect(el.getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("multiple aria-* attrs on one element all apply", () => {
+    const node = div(
+      {
+        "aria-label": "status",
+        "aria-live": "polite",
+        "aria-atomic": true,
+      },
+      "ready",
+    );
+    dispose = mount(node, container);
+    const el = container.firstElementChild as HTMLElement;
+    expect(el.getAttribute("aria-label")).toBe("status");
+    expect(el.getAttribute("aria-live")).toBe("polite");
+    expect(el.getAttribute("aria-atomic")).toBe("true");
+  });
+});
