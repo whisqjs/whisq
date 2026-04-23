@@ -8,6 +8,7 @@
 
 import { type Signal, isSignal } from "./reactive.js";
 import type { TextBind, NumberBind, CheckboxBind, RadioBind } from "./bind.js";
+import { tagBindResult } from "./bind-sentinel.js";
 
 type PathOptions =
   | Record<string, never>
@@ -156,40 +157,40 @@ export function bindPath<T>(
   const as = (options as { as?: string } | undefined)?.as;
 
   if (as === "checkbox") {
-    return {
+    return tagBindResult({
       checked: () => readPath(source.value, path) as boolean,
       onchange: (e) =>
         write((e.target as HTMLInputElement).checked),
-    };
+    });
   }
 
   if (as === "radio") {
     const target = (options as { value: string }).value;
-    return {
+    return tagBindResult({
       value: target,
       checked: () => readPath(source.value, path) === target,
       onchange: (e) => {
         if ((e.target as HTMLInputElement).checked) write(target);
       },
-    };
+    });
   }
 
   if (as === "number") {
-    return {
+    return tagBindResult({
       value: () => String(readPath(source.value, path) ?? ""),
       oninput: (e) => {
         const n = (e.target as HTMLInputElement).valueAsNumber;
         if (!Number.isNaN(n)) write(n);
       },
-    };
+    });
   }
 
-  return {
+  return tagBindResult({
     value: () => String(readPath(source.value, path) ?? ""),
     oninput: (e) =>
       write(
         (e.target as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement)
           .value,
       ),
-  };
+  });
 }

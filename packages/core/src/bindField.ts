@@ -9,6 +9,7 @@
 import { type Signal, isSignal } from "./reactive.js";
 import type { TextBind, NumberBind, CheckboxBind, RadioBind } from "./bind.js";
 import { WhisqKeyByError } from "./dev-errors.js";
+import { tagBindResult } from "./bind-sentinel.js";
 
 interface Common<T> {
   keyBy?: (item: T) => unknown;
@@ -123,42 +124,42 @@ export function bindField<T, K extends keyof T>(
   const as = (options as { as?: string } | undefined)?.as;
 
   if (as === "checkbox") {
-    return {
+    return tagBindResult({
       checked: () => item()[key] as unknown as boolean,
       onchange: (e) => write(
         (e.target as HTMLInputElement).checked as unknown as T[K],
       ),
-    };
+    });
   }
 
   if (as === "radio") {
     const target = (options as { value: string }).value;
-    return {
+    return tagBindResult({
       value: target,
       checked: () => (item()[key] as unknown) === target,
       onchange: (e) => {
         if ((e.target as HTMLInputElement).checked)
           write(target as unknown as T[K]);
       },
-    };
+    });
   }
 
   if (as === "number") {
-    return {
+    return tagBindResult({
       value: () => String(item()[key] as unknown),
       oninput: (e) => {
         const n = (e.target as HTMLInputElement).valueAsNumber;
         if (!Number.isNaN(n)) write(n as unknown as T[K]);
       },
-    };
+    });
   }
 
-  return {
+  return tagBindResult({
     value: () => String(item()[key] as unknown),
     oninput: (e) =>
       write(
         (e.target as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement)
           .value as unknown as T[K],
       ),
-  };
+  });
 }

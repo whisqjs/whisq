@@ -4,6 +4,7 @@
 // ============================================================================
 
 import { type Signal, isSignal } from "./reactive.js";
+import { tagBindResult } from "./bind-sentinel.js";
 
 export interface TextBind {
   value: () => string;
@@ -64,18 +65,18 @@ export function bind(
 
   if (options?.as === "checkbox") {
     const sig = signal as Signal<boolean>;
-    return {
+    return tagBindResult({
       checked: () => sig.value,
       onchange: (e: Event) => {
         sig.value = (e.target as HTMLInputElement).checked;
       },
-    };
+    });
   }
 
   if (options?.as === "radio") {
     const sig = signal as Signal<string>;
     const target = options.value;
-    return {
+    return tagBindResult({
       value: target,
       checked: () => sig.value === target,
       onchange: (e: Event) => {
@@ -83,27 +84,27 @@ export function bind(
           sig.value = target;
         }
       },
-    };
+    });
   }
 
   if (options?.as === "number") {
     const sig = signal as Signal<number>;
-    return {
+    return tagBindResult({
       value: () => String(sig.value),
       oninput: (e: Event) => {
         const n = (e.target as HTMLInputElement).valueAsNumber;
         if (!Number.isNaN(n)) sig.value = n;
       },
-    };
+    });
   }
 
   const sig = signal as Signal<string>;
-  return {
+  return tagBindResult({
     value: () => sig.value,
     oninput: (e: Event) => {
       sig.value = (
         e.target as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
       ).value;
     },
-  };
+  });
 }
