@@ -121,6 +121,39 @@ export const s = sheet({
     textAlign: "center",
   },
 
+  filters: {
+    display: "flex",
+    gap: "0.375rem",
+    marginBottom: "1rem",
+  },
+
+  filterBtn: {
+    flex: "1",
+    padding: "0.5rem 0.75rem",
+    borderRadius: "var(--radius-md)",
+    border: "1px solid var(--color-border)",
+    background: "transparent",
+    color: "var(--color-muted)",
+    fontSize: "0.85rem",
+    fontWeight: "600",
+    cursor: "pointer",
+    transition: "border-color 120ms, color 120ms, background 120ms",
+    "&:hover": {
+      borderColor: "var(--color-primary)",
+      color: "var(--color-text)",
+    },
+  },
+
+  filterBtnActive: {
+    borderColor: "var(--color-primary)",
+    background: "var(--color-primary)",
+    color: "#ffffff",
+    "&:hover": {
+      background: "var(--color-primary)",
+      color: "#ffffff",
+    },
+  },
+
   footer: {
     display: "flex",
     alignItems: "center",
