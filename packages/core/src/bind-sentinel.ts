@@ -23,9 +23,9 @@
 // after spread). It cannot catch direction-2 (user handler first, then
 // spread bind on top) — the user's original handler is gone without a
 // trace by the time props reach the element builder. The recommended
-// convention is to spread bind/bindField/bindPath LAST; a future
-// `compose(bind(sig), { oninput: fn })` helper could cover both shapes
-// but isn't part of this change.
+// convention is to spread bind/bindField/bindPath LAST; `compose()`
+// (WHISQ-132) is the order-independent escape hatch when you deliberately
+// want to augment a bind result with extra handlers.
 // ============================================================================
 
 /**

@@ -1,6 +1,6 @@
 {
   "name": "@whisq/core",
-  "version": "0.1.0-alpha.9",
+  "version": "0.1.0-alpha.10",
   "description": "The AI-native JavaScript framework that senses what you mean — reactive signals, templates, and components",
   "type": "module",
   "main": "./dist/index.js",
@@ -26,14 +26,15 @@
     "./ids": {
       "types": "./dist/ids.d.ts",
       "import": "./dist/ids.js"
-    }
+    },
+    "./public-api-annotated.json": "./dist/public-api-annotated.json"
   },
   "files": [
     "dist",
     "README.md"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && node scripts/generate-public-api.mjs",
+    "build": "tsc -p tsconfig.build.json && node scripts/generate-public-api.mjs && node scripts/generate-api-metadata.mjs",
     "dev": "tsc --watch -p tsconfig.build.json",
     "test": "vitest run --passWithNoTests",
     "size": "size-limit",

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { effect } from "../reactive.js";
 // Imported from the internal path. Public import is `@whisq/core/persistence`
 // (see packages/core/package.json exports).
-import { persistedSignal } from "../persistence.js";
+import { persistedSignal, createStorageNamespace } from "../persistence.js";
 
 beforeEach(() => {
   window.localStorage.clear();
@@ -264,5 +264,68 @@ describe("persistedSignal() — onSchemaFailure callback", () => {
     } finally {
       warn.mockRestore();
     }
+  });
+});
+
+describe("createStorageNamespace()", () => {
+  it("writes under the '<prefix>:<key>' storage slot", () => {
+    const ns = createStorageNamespace("whisq-todo-app");
+    const todos = ns.persistedSignal<string[]>("todos", []);
+    todos.value = ["walk dog"];
+    expect(window.localStorage.getItem("whisq-todo-app:todos")).toBe(
+      '["walk dog"]',
+    );
+    // the un-prefixed key must NOT be touched
+    expect(window.localStorage.getItem("todos")).toBeNull();
+  });
+
+  it("reads from the prefixed slot on init", () => {
+    window.localStorage.setItem("app-a:count", "7");
+    const ns = createStorageNamespace("app-a");
+    const count = ns.persistedSignal("count", 0);
+    expect(count.value).toBe(7);
+  });
+
+  it("keeps two namespaces from colliding on the same key", () => {
+    const a = createStorageNamespace("app-a");
+    const b = createStorageNamespace("app-b");
+    const ca = a.persistedSignal("settings", { theme: "light" });
+    const cb = b.persistedSignal("settings", { theme: "dark" });
+    ca.value = { theme: "light" };
+    cb.value = { theme: "dark" };
+    expect(window.localStorage.getItem("app-a:settings")).toBe(
+      '{"theme":"light"}',
+    );
+    expect(window.localStorage.getItem("app-b:settings")).toBe(
+      '{"theme":"dark"}',
+    );
+  });
+
+  it("passes options (storage: 'session', schema, onSchemaFailure) through to persistedSignal", () => {
+    const ns = createStorageNamespace("ns-pass");
+    const onSchemaFailure = vi.fn();
+    const s = ns.persistedSignal("flag", false, {
+      storage: "session",
+      schema: (raw) => raw as boolean,
+      onSchemaFailure,
+    });
+    s.value = true;
+    expect(window.sessionStorage.getItem("ns-pass:flag")).toBe("true");
+    expect(window.localStorage.getItem("ns-pass:flag")).toBeNull();
+    expect(onSchemaFailure).not.toHaveBeenCalled();
+  });
+
+  it("rejects an empty or whitespace-only prefix", () => {
+    expect(() => createStorageNamespace("")).toThrow(TypeError);
+    expect(() => createStorageNamespace("   ")).toThrow(TypeError);
+  });
+
+  it("rejects a non-string prefix", () => {
+    expect(() =>
+      createStorageNamespace(undefined as unknown as string),
+    ).toThrow(TypeError);
+    expect(() =>
+      createStorageNamespace(null as unknown as string),
+    ).toThrow(TypeError);
   });
 });
