@@ -145,3 +145,59 @@ export function persistedSignal<T>(
 
   return sig;
 }
+
+/**
+ * A namespaced persistence surface — exposes a `persistedSignal` that
+ * prepends a fixed prefix to every storage key, joined by `":"`.
+ */
+export interface StorageNamespace {
+  /**
+   * Like {@link persistedSignal}, but the storage key is transparently
+   * rewritten to `${prefix}:${key}`. The underlying storage behaviour is
+   * unchanged — SSR-safe, schema-validated, quota-safe.
+   */
+  persistedSignal<T>(
+    key: string,
+    initial: T,
+    options?: PersistedSignalOptions<T>,
+  ): Signal<T>;
+}
+
+/**
+ * Create a key-prefixed view over `persistedSignal` so several apps on the
+ * same origin can coexist without stomping on each other's storage slots.
+ *
+ * ```ts
+ * import { createStorageNamespace } from "@whisq/core/persistence";
+ *
+ * const app = createStorageNamespace("whisq-todo-app");
+ * export const todos = app.persistedSignal<Todo[]>("todos", []);
+ * //                                                ^ actual key: "whisq-todo-app:todos"
+ * export const settings = app.persistedSignal<Settings>("settings", DEFAULTS);
+ * ```
+ *
+ * Two namespaces with distinct prefixes never collide; within one namespace,
+ * keys follow the usual `persistedSignal` shape. The helper is a
+ * compositional thin wrapper — calling `app.persistedSignal(k, v, opts)` is
+ * exactly equivalent to `persistedSignal(\`${prefix}:${k}\`, v, opts)`.
+ *
+ * Empty or whitespace prefixes are rejected — they defeat the purpose and
+ * most often indicate the caller forgot to interpolate an app name.
+ */
+export function createStorageNamespace(prefix: string): StorageNamespace {
+  if (typeof prefix !== "string" || prefix.trim().length === 0) {
+    throw new TypeError(
+      "createStorageNamespace: prefix must be a non-empty string",
+    );
+  }
+
+  return {
+    persistedSignal<T>(
+      key: string,
+      initial: T,
+      options?: PersistedSignalOptions<T>,
+    ): Signal<T> {
+      return persistedSignal<T>(`${prefix}:${key}`, initial, options);
+    },
+  };
+}
