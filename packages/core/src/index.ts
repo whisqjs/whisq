@@ -141,3 +141,20 @@ export { compose } from "./compose.js";
 
 // bindPath() for nested-object paths lives at `@whisq/core/forms` — kept off
 // the top-level bundle so apps that don't need deep binding pay no size cost.
+
+// Sub-path guard stubs — these re-exports throw with a friendly message
+// pointing to the correct sub-path when called. They exist purely so a
+// misfiled `import { partition } from "@whisq/core"` compiles and throws
+// at call-time with an actionable error instead of the bundler's generic
+// "not exported" noise. Each stub is a no-side-effect `export function`,
+// so `sideEffects: false` + standard unused-export elimination drops them
+// to zero bytes in bundles that don't import them. Verified by
+// `pnpm -C packages/core bench:shake`.
+export {
+  partition,
+  signalMap,
+  signalSet,
+  randomId,
+  persistedSignal,
+  bindPath,
+} from "./subpath-stubs.js";
