@@ -1,5 +1,15 @@
 # @whisq/router
 
+## 0.1.0-alpha.10
+
+### Patch Changes
+
+- Updated dependencies [987fde7]
+- Updated dependencies [fe295e0]
+- Updated dependencies [94caac8]
+- Updated dependencies [310dd97]
+  - @whisq/core@0.1.0-alpha.10
+
 ## 0.1.0-alpha.9
 
 ### Patch Changes

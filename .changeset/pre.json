@@ -25,7 +25,9 @@
     "clarify-ref-accessor",
     "component-accepts-function-child-return",
     "component-types-and-sheet-nested-selectors",
+    "compose-bind-helper",
     "each-keyed-accessor-callback",
+    "enriched-api-metadata-spike",
     "export-event-types",
     "friendlier-runtime-errors",
     "full-app-template-canonical-shape",
@@ -37,6 +39,8 @@
     "persistedsignal-onschemafailure",
     "project-structure-conventions",
     "reactive-shapes-taxonomy",
+    "small-utility-helpers-omnibus",
+    "subpath-friendly-errors",
     "theme-duplicate-call-warning",
     "theme-sheet-ssr-guard"
   ]
