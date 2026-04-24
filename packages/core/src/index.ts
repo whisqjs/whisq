@@ -137,6 +137,7 @@ export type {
 } from "./bind.js";
 export { bindField } from "./bindField.js";
 export type { BindFieldOptions } from "./bindField.js";
+export { compose } from "./compose.js";
 
 // bindPath() for nested-object paths lives at `@whisq/core/forms` — kept off
 // the top-level bundle so apps that don't need deep binding pay no size cost.
