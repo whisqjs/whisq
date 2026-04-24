@@ -86,6 +86,35 @@ jobs:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
+      # WHISQ-140 — warn-only: verify that unpkg's @latest alias for
+      # @whisq/core/dist/public-api.json has propagated to the version we
+      # just published. The alias is CDN-cached and can lag the npm
+      # registry by minutes to hours; AI tools that resolve "the current
+      # Whisq API" through @latest will silently read the previous
+      # version during that window. This check surfaces the lag in the
+      # release-run logs. `continue-on-error: true` keeps the release
+      # green while we characterise how long the propagation window is
+      # in practice — promote to a failing check once observed stable.
+      - name: Verify unpkg @latest propagation (warn-only)
+        if: steps.changesets.outputs.published == 'true'
+        continue-on-error: true
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          set +e
+          URL="https://unpkg.com/@whisq/core@latest/dist/public-api.json"
+          echo "Fetching $URL — expecting version=$VERSION"
+          SERVED=$(curl -sSfL --max-time 30 "$URL" | node -e "let s='';process.stdin.on('data',d=>s+=d);process.stdin.on('end',()=>{try{process.stdout.write(JSON.parse(s).version||'')}catch{process.stdout.write('')}})")
+          if [ -z "$SERVED" ]; then
+            echo "::warning title=unpkg @latest propagation::Could not read version from $URL — CDN may be serving an older payload or is unreachable."
+            exit 0
+          fi
+          if [ "$SERVED" = "$VERSION" ]; then
+            echo "unpkg @latest is already serving $VERSION — propagation complete."
+          else
+            echo "::warning title=unpkg @latest propagation::npm registry published $VERSION, but $URL still serves $SERVED. AI tools resolving @latest will see the old version until the CDN cache refreshes."
+          fi
+
   backmerge:
     needs: publish
     if: needs.publish.outputs.published == 'true'

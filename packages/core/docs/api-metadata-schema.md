@@ -24,6 +24,47 @@ Consumers import from the package exports map:
 import annotated from "@whisq/core/public-api-annotated.json" with { type: "json" };
 ```
 
+## Consumer patterns (WHISQ-140)
+
+The manifest has two supported retrieval shapes. The choice matters because the unpkg `@latest` CDN alias can lag the npm registry's `latest` dist-tag by minutes to hours after each publish — a consumer that resolves "the current API" through the CDN alias will silently read the previous version's manifest during that window.
+
+### Pattern 1 — workspace-pinned (the MCP server)
+
+For code that builds against Whisq as a dependency and ships alongside it:
+
+```ts
+// packages/mcp-server/src/tools/api-docs.ts
+import annotatedManifest from "@whisq/core/public-api-annotated.json" with { type: "json" };
+```
+
+`@whisq/core` is a `workspace:*` dep; the symlink (or the installed tarball in downstream packages) always resolves to the exact version listed in `package.json`. There is no CDN and no lag window. The MCP server's `signals` topic uses this pattern — see `packages/mcp-server/src/tools/api-docs.ts`.
+
+Use this when the consumer ships with a pinned `@whisq/core` version — it is the cheapest and most reliable shape.
+
+### Pattern 2 — CDN-resolved via the registry (ad-hoc AI tooling)
+
+For AI scaffolders, docs generators, or any out-of-tree tool that wants the **latest published** manifest without pinning a dep:
+
+```sh
+# Never hit unpkg.com/@whisq/core@latest directly — it lags npm.
+# Resolve via the registry, then request the pinned version URL.
+
+URL=$(node packages/core/scripts/resolve-latest-api.mjs --url)
+curl -sSL "$URL" | jq .
+
+# Or as a one-liner for CI pipelines:
+VERSION=$(node packages/core/scripts/resolve-latest-api.mjs --version)
+curl -sSL "https://unpkg.com/@whisq/core@${VERSION}/dist/public-api.json"
+```
+
+The `resolve-latest-api.mjs` helper (WHISQ-140) hits `https://registry.npmjs.org/@whisq/core/latest` first — the registry API is authoritative and updates within seconds of publish — then constructs the `https://unpkg.com/@whisq/core@${version}/...` URL with an explicit version pin. unpkg serves pinned-version URLs out of the exact tarball, so the CDN-lag window is bypassed entirely.
+
+Use `--annotated-url` to target this document's subject (`public-api-annotated.json`) instead of the names-only `public-api.json`.
+
+### Anti-pattern — `unpkg.com/@whisq/core@latest/...`
+
+Fetching `https://unpkg.com/@whisq/core@latest/dist/public-api.json` (or `…@latest/dist/public-api-annotated.json`) is the shape that produces the silent-staleness bug. The `@latest` alias is CDN-cached; during the propagation window after a publish, the URL returns the previous version's manifest even though `npm view @whisq/core version` already reports the current one. AI workflows that fall into this trap produce feedback / code against an API surface that shipped under a different version number than they cite. The post-release CI check in `.github/workflows/release.yml` warns when this window is still open for the current publish.
+
 ## Top-level shape
 
 ```ts
