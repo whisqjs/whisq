@@ -1,5 +1,98 @@
 # @whisq/core
 
+## 0.1.0-alpha.10
+
+### Minor Changes
+
+- 987fde7: New `compose(bindResult, extras)` helper for order-independent composition of `bind()` / `bindField()` / `bindPath()` results with user-supplied event handlers.
+
+  The dev warning added in alpha.9 caught _direction 1_ (user handler after the bind spread) but _direction 2_ (user handler before the spread) was undetectable from final props alone — the user's handler was gone without a trace by the time the element builder ran. `compose()` sidesteps the order dependency entirely: shared handler keys chain both handlers (bind first, user second), and non-handler props follow normal object-spread semantics (extras win).
+
+  ```ts
+  import { bind, compose, input } from "@whisq/core";
+
+  input({
+    ...compose(bind(draft), {
+      oninput: (e) => track(e), // fires after bind writes draft
+      onfocus: () => analytics.focus(), // bind has no onfocus — attaches cleanly
+    }),
+  });
+  ```
+
+  The compose result re-tags its bind-sentinel with the composed handler as the "declared" one, so the alpha.9 duplicate-handler warning does not fire on a well-formed `compose()` spread, but still fires if someone overwrites the compose result afterward.
+
+  Closes WHISQ-132.
+
+- fe295e0: **Spike:** first slice of the enriched `public-api.json` from #103 — ships a drift-validated per-symbol metadata manifest, populates it for the `signals` topic, and wires the MCP server's `signals` docs to consume it.
+
+  ### `@whisq/core`
+  - New artefact: `dist/public-api-annotated.json`. Schema spec at `packages/core/docs/api-metadata-schema.md`. Current shape — `{ version, schemaVersion: 1, symbols: SymbolEntry[] }` — is frozen behind `schemaVersion` so consumers can guard against breaking changes.
+  - New exports-map entry: `"@whisq/core/public-api-annotated.json"` — the public path consumers import from.
+  - Hand-curated source of truth at `packages/core/metadata/api-enrichment.json`. The build step runs `scripts/generate-api-metadata.mjs` after `generate-public-api.mjs` and fails with a non-zero exit if:
+    - a `symbols[*].name` is not in `public-api.json` exports (drift),
+    - a `seeAlso[*]` reference is not in `public-api.json` exports (drift),
+    - any required field on a `SymbolEntry` is missing or wrong type,
+    - a duplicate symbol entry appears.
+  - Populated for one topic this release: `signals` (`signal`, `computed`, `effect`, `batch`). The names-only `public-api.json` is unchanged — this is a sibling file, not a replacement. See #103 for the path to unification.
+
+  ### `@whisq/mcp-server`
+  - New `@whisq/core` workspace dependency (was previously untyped docs; now consumes the annotated manifest).
+  - `api-docs.ts` `signals` topic is generated from the enriched manifest at build time — no more hand-written drift. The other topics (`elements`, `components`, `routing`, …) remain hand-written until the schema stabilises; migrating them is a follow-up tracked against #103.
+  - Load-bearing phrases consumers grep for (`signal(`, `computed(`, `.value`, `peek()`, `batch(() =>`) are locked in by a new regression test block.
+
+  ### Out of scope (follow-ups)
+  - CI drift check between `public-api.json` and `public-api-annotated.json` (all existing exports must have enrichment) — follow-up once the other topics migrate.
+  - Migrating the remaining MCP topics — mechanical once this spike's shape is validated across a release cycle.
+  - Unifying the two manifests into one — option A in #103; gated on 1–2 releases of stable schema.
+
+  Closes #138.
+
+- 94caac8: Two small additive helpers to close the alpha.9 feedback loop — both opt-in on existing sub-path imports, no breaking changes.
+  - **`createStorageNamespace(prefix)`** on `@whisq/core/persistence` — returns a `{ persistedSignal }` view whose storage keys are transparently rewritten to `${prefix}:${key}`. Use when several Whisq apps share an origin (marketing site + dashboard + demo playground on the same host) and must not collide. A thin compositional wrapper — everything `persistedSignal` already supports (storage kind, schema, onSchemaFailure, …) passes straight through. Empty or whitespace prefixes are rejected so a forgotten interpolation fails loudly instead of silently using `":key"`.
+
+    ```ts
+    import { createStorageNamespace } from "@whisq/core/persistence";
+
+    const app = createStorageNamespace("whisq-todo-app");
+    export const todos = app.persistedSignal<Todo[]>("todos", []);
+    //                                               ↑ actual key: "whisq-todo-app:todos"
+    ```
+
+  - **`randomId(options?)`** on `@whisq/core/ids` — now accepts `{ prefix, rng }`. Zero-arg call is unchanged. `prefix` concatenates directly (no separator — pass `"todo_"` if that's what you want). `rng` replaces `Math.random` in the fallback synthesis and **also bypasses `crypto.randomUUID`**, so a seeded PRNG produces the same id on every platform. The primary use-case is deterministic ids for snapshot tests — no more globally stubbing `crypto.randomUUID`.
+
+    ```ts
+    import { randomId } from "@whisq/core/ids";
+
+    randomId(); // default: crypto.randomUUID
+    randomId({ prefix: "todo_" }); // "todo_01K1…"
+    randomId({ rng: seedrandom(42) }); // deterministic across environments
+    ```
+
+  Closes WHISQ-134. Source: `dev/feedback/latest/FRAMEWORK_FEEDBACK_CLAUDE_v0.1.0-alpha.9.md` (N5, N7).
+
+- 310dd97: Friendly runtime errors for sub-path exports imported from the main `@whisq/core` path.
+
+  Apps of any size reach into multiple sub-path imports: `@whisq/core/persistence`, `/ids`, `/collections`, `/forms`. This is the right shape for tree-shaking — unused sub-paths add zero bytes — but an AI or human writing `import { partition } from "@whisq/core"` used to hit the generic bundler "not exported" error with no hint about where the symbol actually lives.
+
+  The main entry now re-exports these sub-path names as runtime stubs. Importing one compiles cleanly; calling it throws with a message that names the correct sub-path and links to the docs page:
+
+  ```ts
+  import { partition } from "@whisq/core"; // compiles
+  const [a, b] = partition(() => xs.value, p); // → Error("partition" is not exported from "@whisq/core". Import it from "@whisq/core/collections" instead. See https://whisq.dev/api/partition/)
+  ```
+
+  Each stub carries `@deprecated` JSDoc so editor hover surfaces the correct sub-path without running the code.
+
+  Symbols covered:
+  - `partition`, `signalMap`, `signalSet` → `@whisq/core/collections`
+  - `randomId` → `@whisq/core/ids`
+  - `persistedSignal` → `@whisq/core/persistence`
+  - `bindPath` → `@whisq/core/forms`
+
+  Stubs are plain `export function`s in a side-effect-free module; bundlers with standard unused-export elimination (esbuild, Rollup, Vite) drop them to zero bytes in apps that don't import them. Verified by building a minimal `import { signal }` app: the produced bundle contains no stub names, no error strings, and no sub-path-stubs module reference.
+
+  Closes WHISQ-133.
+
 ## 0.1.0-alpha.9
 
 ### Minor Changes
