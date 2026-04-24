@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "symbols": [
+    {
+      "name": "signal",
+      "kind": "function",
+      "signature": "signal<T>(initial: T): Signal<T>",
+      "summary": "Create a reactive value that tracks reads and notifies on writes.",
+      "gotchas": [
+        "Mutating an array or object in place (e.g. items.value.push(x)) does not trigger updates — use items.value = [...items.value, x] so the identity changes.",
+        "Passing a signal as an element child (e.g. div(count.value)) captures the value once. Wrap in a function (e.g. () => count.value) for reactive rendering.",
+        "peek() reads without tracking — do not use it inside a computed/effect expecting reactivity."
+      ],
+      "examples": [
+        "const count = signal(0);\ncount.value;            // read (tracked)\ncount.value = 5;        // write (notifies)\ncount.update(n => n + 1);\ncount.peek();           // read (NOT tracked)"
+      ],
+      "since": "0.1.0-alpha.1",
+      "seeAlso": ["computed", "effect", "batch"],
+      "topic": "signals"
+    },
+    {
+      "name": "computed",
+      "kind": "function",
+      "signature": "computed<T>(fn: () => T): ReadonlySignal<T>",
+      "summary": "Derive a reactive value from other signals; re-runs lazily when its dependencies change.",
+      "gotchas": [
+        "The returned signal is read-only — you cannot write doubled.value = x. Attempting to coerces at the type level; at runtime the setter is absent.",
+        "Dependency tracking is dynamic — an unread branch of an if/else does not create a dependency. Structure the function so reactivity follows the actual read path."
+      ],
+      "examples": [
+        "const count = signal(0);\nconst doubled = computed(() => count.value * 2);\n// doubled.value re-reads when count.value changes"
+      ],
+      "since": "0.1.0-alpha.1",
+      "seeAlso": ["signal", "effect", "batch"],
+      "topic": "signals"
+    },
+    {
+      "name": "effect",
+      "kind": "function",
+      "signature": "effect(fn: () => void | (() => void)): () => void",
+      "summary": "Run a side effect that re-executes when any signal it reads changes.",
+      "gotchas": [
+        "Return a cleanup function from the effect body if you need to tear down subscriptions, timers, or event listeners — it runs before each re-execution and on final disposal.",
+        "Calling the dispose function is the only way to stop an effect. Component effects wired via onMount/onCleanup handle this automatically; standalone effects are the caller's responsibility."
+      ],
+      "examples": [
+        "const dispose = effect(() => {\n  console.log(count.value);\n  return () => console.log('cleanup');\n});\ndispose(); // stop receiving updates"
+      ],
+      "since": "0.1.0-alpha.1",
+      "seeAlso": ["signal", "computed", "batch"],
+      "topic": "signals"
+    },
+    {
+      "name": "batch",
+      "kind": "function",
+      "signature": "batch(fn: () => void): void",
+      "summary": "Group multiple signal writes so dependent effects and computeds re-run only once afterward.",
+      "gotchas": [
+        "batch() is synchronous — await inside the callback defeats the batching (writes after the await land outside the batch).",
+        "Throwing inside batch() still flushes pending effects before the error propagates so the UI doesn't get stranded in an inconsistent state."
+      ],
+      "examples": [
+        "batch(() => {\n  x.value = 1;\n  y.value = 2;\n});\n// one update cycle, not two"
+      ],
+      "since": "0.1.0-alpha.1",
+      "seeAlso": ["signal", "computed", "effect"],
+      "topic": "signals"
+    }
+  ]
+}

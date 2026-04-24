@@ -1,7 +1,15 @@
 /**
  * Query Whisq API reference by topic. Returns structured documentation
  * that AI tools can use to generate accurate code.
+ *
+ * Topics are mostly hand-written below. The `signals` topic is generated
+ * from the enriched manifest shipped by @whisq/core (see WHISQ-138):
+ * `@whisq/core/public-api-annotated.json` is the drift-validated source of
+ * truth. The other topics remain hand-written for now — migrating them is
+ * tracked against #103.
  */
+
+import annotatedManifest from "@whisq/core/public-api-annotated.json" with { type: "json" };
 
 export type ApiTopic =
   | "signals"
@@ -19,6 +27,72 @@ export type ApiTopic =
 export interface ApiDocResult {
   topic: string;
   content: string;
+}
+
+interface EnrichedSymbol {
+  name: string;
+  kind: string;
+  signature: string;
+  summary: string;
+  gotchas: string[];
+  examples: string[];
+  since: string;
+  seeAlso: string[];
+  topic: string;
+}
+
+interface EnrichedManifest {
+  version: string;
+  schemaVersion: number;
+  symbols: EnrichedSymbol[];
+}
+
+const MANIFEST = annotatedManifest as EnrichedManifest;
+
+const TOPIC_TITLES: Record<ApiTopic, string> = {
+  overview: "Whisq API Overview",
+  signals: "Signals",
+  elements: "Elements",
+  components: "Components",
+  routing: "Routing (@whisq/router)",
+  styling: "Styling",
+  forms: "Forms",
+  lists: "Lists",
+  async: "Async Data",
+  ssr: "SSR (@whisq/ssr)",
+  testing: "Testing (@whisq/testing)",
+};
+
+function renderSymbol(symbol: EnrichedSymbol): string {
+  const parts: string[] = [];
+  parts.push(`## ${symbol.signature}`);
+  parts.push("");
+  parts.push(symbol.summary);
+  for (const example of symbol.examples) {
+    parts.push("");
+    parts.push("```ts");
+    parts.push(example);
+    parts.push("```");
+  }
+  if (symbol.gotchas.length > 0) {
+    parts.push("");
+    parts.push("**Gotchas:**");
+    for (const gotcha of symbol.gotchas) {
+      parts.push(`- ${gotcha}`);
+    }
+  }
+  if (symbol.seeAlso.length > 0) {
+    parts.push("");
+    parts.push(`**See also:** ${symbol.seeAlso.join(", ")}`);
+  }
+  return parts.join("\n");
+}
+
+function renderTopicFromManifest(topic: ApiTopic): string {
+  const title = TOPIC_TITLES[topic];
+  const symbols = MANIFEST.symbols.filter((s) => s.topic === topic);
+  const sections = symbols.map((s) => renderSymbol(s));
+  return [`# ${title}`, "", ...sections].join("\n");
 }
 
 const DOCS: Record<ApiTopic, string> = {
@@ -40,40 +114,7 @@ Whisq is an AI-native JavaScript/TypeScript framework. No JSX, no build step.
 import { signal, computed, effect, batch, div, span, button, component, mount } from "@whisq/core";
 \`\`\``,
 
-  signals: `# Signals
-
-## signal(initialValue)
-Create a reactive value.
-\`\`\`ts
-const count = signal(0);
-count.value;           // read (triggers tracking)
-count.value = 5;       // write (triggers updates)
-count.update(n => n + 1); // update via function
-count.peek();          // read WITHOUT tracking
-\`\`\`
-
-## computed(fn)
-Derived value that auto-updates when dependencies change.
-\`\`\`ts
-const doubled = computed(() => count.value * 2);
-\`\`\`
-
-## effect(fn)
-Side effect that re-runs when dependencies change.
-\`\`\`ts
-const dispose = effect(() => console.log(count.value));
-dispose(); // cleanup
-\`\`\`
-
-## batch(fn)
-Batch multiple signal updates into one notification.
-\`\`\`ts
-batch(() => { x.value = 1; y.value = 2; }); // one update cycle
-\`\`\`
-
-## Anti-patterns
-- items.value.push(x) — won't trigger. Use: items.value = [...items.value, x]
-- count.value as child — wrap in function: () => count.value`,
+  signals: renderTopicFromManifest("signals"),
 
   elements: `# Elements
 

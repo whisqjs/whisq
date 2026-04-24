@@ -15,6 +15,52 @@ describe("queryApi", () => {
     expect(result.content).toContain("computed(");
   });
 
+  describe("signals topic — load-bearing phrases after migration to enriched manifest (WHISQ-138)", () => {
+    // The signals topic is now generated from the @whisq/core enriched
+    // manifest rather than hand-written. These assertions pin the phrases
+    // consumers have depended on so a metadata edit can't silently drop them.
+    const content = queryApi("signals").content;
+
+    it("keeps the top-level '# Signals' heading", () => {
+      expect(content).toMatch(/^# Signals/);
+    });
+
+    it("covers the four core reactive primitives in their signature form", () => {
+      for (const snippet of [
+        "signal<T>(initial: T)",
+        "computed<T>(fn: () => T)",
+        "effect(fn:",
+        "batch(fn:",
+      ]) {
+        expect(content).toContain(snippet);
+      }
+    });
+
+    it("keeps the canonical usage phrases that API consumers grep for", () => {
+      for (const phrase of [
+        ".value",
+        "peek()",
+        "count.update",
+        "computed(() =>",
+        "batch(() =>",
+      ]) {
+        expect(content).toContain(phrase);
+      }
+    });
+
+    it("surfaces the array-mutation and stale-child gotchas (the two top signal footguns)", () => {
+      expect(content).toMatch(/items\.value\.push.*does not trigger/i);
+      expect(content).toMatch(/captures the value once/i);
+    });
+
+    it("links related primitives via See also", () => {
+      expect(content).toContain("**See also:**");
+      expect(content).toContain("computed");
+      expect(content).toContain("effect");
+      expect(content).toContain("batch");
+    });
+  });
+
   it("returns elements docs", () => {
     const result = queryApi("elements");
     expect(result.content).toContain("div(");
