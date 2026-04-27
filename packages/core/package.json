@@ -65,7 +65,7 @@
   "sideEffects": false,
   "devDependencies": {
     "@size-limit/preset-small-lib": "^11.2.0",
-    "jsdom": "^29.0.2",
+    "jsdom": "^29.1.0",
     "size-limit": "^11.2.0",
     "typescript": "^5.9.3",
     "vitest": "^3.2.4"
