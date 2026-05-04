@@ -35,7 +35,7 @@
     "@whisq/core": "workspace:*"
   },
   "devDependencies": {
-    "jsdom": "^29.0.2",
+    "jsdom": "^29.1.1",
     "typescript": "^5.9.3",
     "vitest": "^3.2.4"
   },
