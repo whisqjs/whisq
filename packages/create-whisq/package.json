@@ -26,7 +26,7 @@
   "author": "Markot s. r. o.",
   "license": "MIT",
   "devDependencies": {
-    "@types/node": "^22.19.17",
+    "@types/node": "^22.19.18",
     "typescript": "^5.9.3",
     "vitest": "^3.2.4"
   },
